@@ -3,7 +3,7 @@
  * Integrates Auth, Conversation AI, Web Speech STT, MediaPipe CV, DB Persistence, Progress Analytics & Weakness Engine
  */
 
-const API_BASE_URL = (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '5000'))
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '5000' && window.location.port !== ''
   ? 'http://localhost:5000'
   : window.location.origin;
 
