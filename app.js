@@ -1243,6 +1243,184 @@ function addLi(ul, text) {
   ul.appendChild(li);
 }
 
+// ---------------- 13. DEMO AUTHENTICATION ENGINE (LOCALSTORAGE) ----------------
+function initAuth() {
+  const activeUser = JSON.parse(localStorage.getItem('ai_coach_active_user') || 'null');
+  if (activeUser) {
+    state.currentUser = activeUser;
+    updateAuthUI(activeUser);
+  } else {
+    updateAuthUI(null);
+  }
+}
+
+function updateAuthUI(user) {
+  const openAuthModalBtn = document.getElementById('openAuthModalBtn');
+  const userProfilePill = document.getElementById('userProfilePill');
+  const headerUserName = document.getElementById('headerUserName');
+  const headerUserRole = document.getElementById('headerUserRole');
+
+  if (user) {
+    if (openAuthModalBtn) openAuthModalBtn.style.display = 'none';
+    if (userProfilePill) userProfilePill.style.display = 'flex';
+    if (headerUserName) headerUserName.textContent = `Hi, ${user.name || 'Candidate'}`;
+    if (headerUserRole) headerUserRole.textContent = user.role || 'Software Engineer';
+  } else {
+    if (openAuthModalBtn) openAuthModalBtn.style.display = 'flex';
+    if (userProfilePill) userProfilePill.style.display = 'none';
+  }
+}
+
+function openAuthModal() {
+  const authModal = document.getElementById('authModal');
+  if (authModal) {
+    authModal.classList.add('active');
+    clearAuthMessages();
+  }
+}
+
+function closeAuthModal() {
+  const authModal = document.getElementById('authModal');
+  if (authModal) {
+    authModal.classList.remove('active');
+    clearAuthMessages();
+  }
+}
+
+function clearAuthMessages() {
+  const errEl = document.getElementById('authErrorMsg');
+  const succEl = document.getElementById('authSuccessMsg');
+  if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+  if (succEl) { succEl.textContent = ''; succEl.style.display = 'none'; }
+}
+
+function showAuthError(msg) {
+  const errEl = document.getElementById('authErrorMsg');
+  const succEl = document.getElementById('authSuccessMsg');
+  if (succEl) { succEl.style.display = 'none'; }
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.style.display = 'block';
+  }
+}
+
+function showAuthSuccess(msg) {
+  const errEl = document.getElementById('authErrorMsg');
+  const succEl = document.getElementById('authSuccessMsg');
+  if (errEl) { errEl.style.display = 'none'; }
+  if (succEl) {
+    succEl.textContent = msg;
+    succEl.style.display = 'block';
+  }
+}
+
+let isSignupMode = false;
+
+function setAuthMode(mode) {
+  isSignupMode = mode === 'signup';
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+  const groupName = document.getElementById('groupName');
+  const groupConfirmPassword = document.getElementById('groupConfirmPassword');
+  const groupRole = document.getElementById('groupRole');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  const authModalTitle = document.getElementById('authModalTitle');
+  const authModalSubtitle = document.getElementById('authModalSubtitle');
+  const authToggleText = document.getElementById('authToggleText');
+  const authToggleBtn = document.getElementById('authToggleBtn');
+
+  clearAuthMessages();
+
+  if (isSignupMode) {
+    if (tabSignup) tabSignup.classList.add('active');
+    if (tabLogin) tabLogin.classList.remove('active');
+    if (groupName) groupName.style.display = 'block';
+    if (groupConfirmPassword) groupConfirmPassword.style.display = 'block';
+    if (groupRole) groupRole.style.display = 'block';
+    if (authSubmitBtn) authSubmitBtn.textContent = 'Create Account';
+    if (authModalTitle) authModalTitle.textContent = 'Account Registration';
+    if (authModalSubtitle) authModalSubtitle.textContent = 'Create a demo account to track practice scores over time.';
+    if (authToggleText) authToggleText.textContent = 'Already have an account?';
+    if (authToggleBtn) authToggleBtn.textContent = 'Login';
+  } else {
+    if (tabLogin) tabLogin.classList.add('active');
+    if (tabSignup) tabSignup.classList.remove('active');
+    if (groupName) groupName.style.display = 'none';
+    if (groupConfirmPassword) groupConfirmPassword.style.display = 'none';
+    if (groupRole) groupRole.style.display = 'none';
+    if (authSubmitBtn) authSubmitBtn.textContent = 'Login';
+    if (authModalTitle) authModalTitle.textContent = 'Account Sign In';
+    if (authModalSubtitle) authModalSubtitle.textContent = 'Access saved practice history, analytics, and weakness detection.';
+    if (authToggleText) authToggleText.textContent = "Don't have an account?";
+    if (authToggleBtn) authToggleBtn.textContent = 'Register';
+  }
+}
+
+function handleAuthSubmit() {
+  clearAuthMessages();
+
+  const email = (document.getElementById('authEmail')?.value || '').trim();
+  const password = document.getElementById('authPassword')?.value || '';
+
+  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  if (isSignupMode) {
+    const name = (document.getElementById('authName')?.value || '').trim();
+    const confirmPassword = document.getElementById('authConfirmPassword')?.value || '';
+    const role = document.getElementById('authRole')?.value || 'Software Engineer';
+
+    if (!name) return showAuthError("Please enter your name.");
+    if (!email) return showAuthError("Please enter your email address.");
+    if (!isValidEmail(email)) return showAuthError("Please enter a valid email address.");
+    if (!password) return showAuthError("Please enter a password.");
+    if (password.length < 6) return showAuthError("Password must be at least 6 characters long.");
+    if (password !== confirmPassword) return showAuthError("Passwords do not match.");
+
+    const users = JSON.parse(localStorage.getItem('ai_coach_demo_users') || '[]');
+    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+      return showAuthError("An account with this email already exists.");
+    }
+
+    const newUser = { name, email, password, role };
+    users.push(newUser);
+    localStorage.setItem('ai_coach_demo_users', JSON.stringify(users));
+
+    localStorage.setItem('ai_coach_active_user', JSON.stringify(newUser));
+    state.currentUser = newUser;
+    updateAuthUI(newUser);
+
+    showAuthSuccess(`Account created successfully! Welcome, ${name}.`);
+    setTimeout(() => { closeAuthModal(); }, 1200);
+
+  } else {
+    if (!email) return showAuthError("Please enter your email address.");
+    if (!password) return showAuthError("Please enter your password.");
+
+    const users = JSON.parse(localStorage.getItem('ai_coach_demo_users') || '[]');
+    let user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+
+    if (!user && (email.toLowerCase() === 'demo@example.com' || email.toLowerCase() === 'admin@example.com') && password === 'password123') {
+      user = { name: 'Demo Candidate', email: 'demo@example.com', role: 'Software Engineer' };
+    }
+
+    if (user) {
+      localStorage.setItem('ai_coach_active_user', JSON.stringify(user));
+      state.currentUser = user;
+      updateAuthUI(user);
+      showAuthSuccess(`Login successful! Welcome back, ${user.name}.`);
+      setTimeout(() => { closeAuthModal(); }, 1000);
+    } else {
+      showAuthError("Invalid email or password.");
+    }
+  }
+}
+
+function logoutUser() {
+  localStorage.removeItem('ai_coach_active_user');
+  state.currentUser = { name: 'Fresher Candidate', role: 'Software Engineer' };
+  updateAuthUI(null);
+}
+
 let vantaHaloEffect = null;
 function initVantaHalo() {
   if (window.VANTA && window.VANTA.HALO && document.getElementById('vanta-bg')) {
@@ -1263,11 +1441,13 @@ function initVantaHalo() {
   }
 }
 
-// DOM Event Listeners
+// DOM Event Listeners Initializer
 document.addEventListener('DOMContentLoaded', () => {
   initVantaHalo();
+  initAuth();
   initModels();
 
+  // Navigation Links
   if (elements.navBrandLink) elements.navBrandLink.addEventListener('click', () => showScreen('landingPage'));
   if (elements.navHome) elements.navHome.addEventListener('click', () => showScreen('landingPage'));
   if (elements.navGuide) elements.navGuide.addEventListener('click', scrollToGuide);
@@ -1275,17 +1455,56 @@ document.addEventListener('DOMContentLoaded', () => {
   if (elements.navInterview) elements.navInterview.addEventListener('click', startFullInterview);
   if (elements.navHistory) elements.navHistory.addEventListener('click', () => showScreen('historyPage'));
 
+  // Hero Actions & Launch Cards
   if (elements.heroStartBtn) elements.heroStartBtn.addEventListener('click', startFullInterview);
   if (elements.heroDemoBtn) elements.heroDemoBtn.addEventListener('click', startQuickDemo);
   if (elements.heroGuideBtn) elements.heroGuideBtn.addEventListener('click', scrollToGuide);
   if (elements.startDemoCardBtn) elements.startDemoCardBtn.addEventListener('click', startQuickDemo);
   if (elements.startFullCardBtn) elements.startFullCardBtn.addEventListener('click', startFullInterview);
 
+  // Setup & Interview Action Buttons
   if (elements.startBtn) elements.startBtn.addEventListener('click', launchPracticeSession);
   if (elements.nextBtn) elements.nextBtn.addEventListener('click', submitTurnAnswer);
   if (elements.stopBtn) elements.stopBtn.addEventListener('click', finishPracticeSession);
   if (elements.saveAndDashBtn) elements.saveAndDashBtn.addEventListener('click', () => showScreen('landingPage'));
   if (elements.restartBtn) elements.restartBtn.addEventListener('click', () => showScreen('inputPage'));
+
+  // Auth Modal Event Listeners
+  const openAuthModalBtn = document.getElementById('openAuthModalBtn');
+  const closeAuthModalBtn = document.getElementById('closeAuthModalBtn');
+  const authModal = document.getElementById('authModal');
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  const authToggleBtn = document.getElementById('authToggleBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  if (openAuthModalBtn) openAuthModalBtn.addEventListener('click', openAuthModal);
+  if (closeAuthModalBtn) closeAuthModalBtn.addEventListener('click', closeAuthModal);
+  if (logoutBtn) logoutBtn.addEventListener('click', logoutUser);
+
+  if (authModal) {
+    authModal.addEventListener('click', (e) => {
+      if (e.target === authModal) closeAuthModal();
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && authModal && authModal.classList.contains('active')) {
+      closeAuthModal();
+    }
+  });
+
+  if (tabLogin) tabLogin.addEventListener('click', () => setAuthMode('login'));
+  if (tabSignup) tabSignup.addEventListener('click', () => setAuthMode('signup'));
+
+  if (authToggleBtn) {
+    authToggleBtn.addEventListener('click', () => {
+      setAuthMode(isSignupMode ? 'login' : 'signup');
+    });
+  }
+
+  if (authSubmitBtn) authSubmitBtn.addEventListener('click', handleAuthSubmit);
 
   // 3D Avatar Speaking Toggle
   const avatarUnmuteToggleBtn = document.getElementById('avatarUnmuteToggleBtn');
@@ -1303,3 +1522,4 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+

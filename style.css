@@ -259,6 +259,9 @@ body {
   font-size: 0.85rem;
   margin-left: 6px;
   transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .btn-sm-logout:hover { color: #f43f5e; }
 
@@ -337,7 +340,11 @@ body {
 }
 
 .auth-error-msg {
-  color: #f43f5e; font-size: 0.82rem; font-weight: 700; margin-bottom: 12px; text-align: center;
+  color: #f43f5e; font-size: 0.85rem; font-weight: 700; margin-bottom: 12px; text-align: center;
+}
+
+.auth-success-msg {
+  color: #34d399; font-size: 0.85rem; font-weight: 700; margin-bottom: 12px; text-align: center;
 }
 
 /* Hero Section Split Layout */
@@ -518,6 +525,159 @@ body {
 .rule-stat { font-size: 3.2rem; font-weight: 800; color: #f3e5ab; margin-bottom: 8px; }
 .rule-label { font-size: 1.1rem; font-weight: 800; color: #ffffff; margin-bottom: 10px; }
 .rule-card p { font-size: 0.92rem; color: #fdfbf7; line-height: 1.5; }
+
+/* Non-Verbal Guide Structured Cards (Clean 2-Column Layout) */
+.guide-card-row {
+  display: flex;
+  background: rgba(45, 9, 16, 0.88);
+  border: 1.5px solid rgba(243, 229, 171, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  gap: 28px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  transition: var(--transition);
+  position: relative;
+  z-index: 2;
+}
+
+.guide-card-row:hover {
+  border-color: #f3e5ab;
+  transform: translateY(-3px);
+  box-shadow: 0 16px 36px rgba(168, 28, 55, 0.4);
+}
+
+@media (max-width: 768px) {
+  .guide-card-row { flex-direction: column; gap: 16px; padding: 20px; }
+}
+
+.guide-card-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.guide-card-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  margin-bottom: 10px;
+}
+.guide-card-icon.blue { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+.guide-card-icon.cyan { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
+.guide-card-icon.green { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
+.guide-card-icon.purple { background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.3); }
+.guide-card-icon.orange { background: rgba(251, 146, 60, 0.15); color: #fb923c; border: 1px solid rgba(251, 146, 60, 0.3); }
+
+.guide-category-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #f3e5ab;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.guide-card-right { flex: 1; }
+
+.guide-card-right h3 {
+  font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-bottom: 6px;
+}
+
+.guide-card-desc {
+  font-size: 0.95rem; color: #fdfbf7; line-height: 1.5; margin-bottom: 18px;
+}
+
+.guide-practices-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .guide-practices-grid { grid-template-columns: 1fr; }
+}
+
+.practice-block {
+  padding: 16px; border-radius: 14px;
+}
+
+.practice-block.good {
+  background: rgba(52, 211, 153, 0.12); border-left: 4px solid #34d399;
+}
+
+.practice-block.avoid {
+  background: rgba(244, 63, 94, 0.12); border-left: 4px solid #f43f5e;
+}
+
+.block-title {
+  font-size: 0.88rem; font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+}
+
+.practice-block.good .block-title { color: #34d399; }
+.practice-block.avoid .block-title { color: #f43f5e; }
+
+.practice-block ul {
+  list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px;
+}
+
+.practice-block li {
+  font-size: 0.86rem; color: #fdfbf7; font-weight: 600; line-height: 1.4; position: relative; padding-left: 14px;
+}
+
+.practice-block li::before {
+  content: "•"; position: absolute; left: 0; color: inherit; font-weight: 800;
+}
+
+/* Quotes Grid */
+.quotes-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 24px;
+}
+
+@media (max-width: 850px) { .quotes-grid { grid-template-columns: 1fr; } }
+
+.quote-card {
+  background: rgba(45, 9, 16, 0.88);
+  border: 1.5px solid rgba(243, 229, 171, 0.3);
+  border-radius: 20px; padding: 24px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: var(--transition);
+}
+
+.quote-card:hover {
+  transform: translateY(-4px); border-color: #f3e5ab; box-shadow: 0 16px 36px rgba(168, 28, 55, 0.4);
+}
+
+.quote-icon { font-size: 1.4rem; color: #f3e5ab; margin-bottom: 12px; }
+.quote-text { font-size: 0.95rem; font-style: italic; color: #ffffff; line-height: 1.5; margin-bottom: 20px; font-weight: 500; }
+.quote-author { display: flex; align-items: center; gap: 12px; }
+.author-avatar {
+  width: 36px; height: 36px; background: #a81c37; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #f3e5ab; font-size: 0.9rem;
+}
+.author-name { font-size: 0.9rem; font-weight: 800; color: #ffffff; }
+.author-title { font-size: 0.75rem; color: #f3e5ab; font-weight: 600; }
+
+/* Launch Cards */
+.launch-cards-container { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 48px; }
+@media (max-width: 768px) { .launch-cards-container { grid-template-columns: 1fr; } }
+
+.launch-card {
+  background: rgba(45, 9, 16, 0.88); border: 1.5px solid rgba(243, 229, 171, 0.25);
+  border-radius: 20px; padding: 28px; text-align: center; transition: var(--transition);
+}
+.launch-card:hover { transform: translateY(-4px); border-color: #f3e5ab; }
+.launch-card.highlight { border-color: rgba(243, 229, 171, 0.5); background: rgba(60, 12, 22, 0.92); }
+.launch-icon {
+  width: 50px; height: 50px; border-radius: 16px; margin: 0 auto 14px auto;
+  display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+}
+.launch-icon.yellow { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+.launch-icon.green { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
 
 /* Setup Page & Welcome Card */
 .welcome-card {

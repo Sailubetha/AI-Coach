@@ -78,13 +78,13 @@
         <button class="close-modal-btn" id="closeAuthModalBtn">&times;</button>
         <div class="auth-header">
           <div class="auth-icon"><i class="fas fa-user-shield"></i></div>
-          <h2>Account Sign In & Sign Up</h2>
-          <p>Access saved practice history, analytics, and recurring weakness detection.</p>
+          <h2 id="authModalTitle">Account Sign In</h2>
+          <p id="authModalSubtitle">Access saved practice history, analytics, and recurring weakness detection.</p>
         </div>
 
         <div class="auth-tabs">
-          <button class="auth-tab active" id="tabLogin">Sign In</button>
-          <button class="auth-tab" id="tabSignup">Create Account</button>
+          <button class="auth-tab active" id="tabLogin">Login</button>
+          <button class="auth-tab" id="tabSignup">Register</button>
         </div>
 
         <form id="authForm" onsubmit="return false;">
@@ -119,9 +119,15 @@
             </select>
           </div>
 
-          <div class="auth-error-msg" id="authErrorMsg"></div>
+          <div class="auth-error-msg" id="authErrorMsg" style="display:none;"></div>
+          <div class="auth-success-msg" id="authSuccessMsg" style="display:none;"></div>
 
-          <button class="btn-primary" id="authSubmitBtn">Sign In to AI Coach</button>
+          <button class="btn-primary" id="authSubmitBtn">Login</button>
+
+          <div style="text-align:center; margin-top:16px; font-size:0.85rem; color:var(--text-muted);" id="authToggleContainer">
+            <span id="authToggleText">Don't have an account?</span>
+            <button type="button" class="btn-link" id="authToggleBtn" style="background:none; border:none; color:var(--accent); font-weight:800; cursor:pointer; text-decoration:underline; margin-left:4px;">Register</button>
+          </div>
         </form>
       </div>
     </div>
@@ -193,13 +199,13 @@
 
       </section>
 
-      <!-- SCROLLING DOWN: EDUCATIONAL NON-VERBAL BODY LANGUAGE SECTION -->
+      <!-- EDUCATIONAL NON-VERBAL BODY LANGUAGE SECTION -->
       <section class="guide-section" id="guideSection">
         
         <div class="section-header">
-          <span class="section-tag">SCIENCE OF NON-VERBAL COMMUNICATION</span>
-          <h2>The Importance of Body Language in Interviews</h2>
-          <p>Over 90% of communication impact comes from non-verbal posture, facial expressions, and vocal inflection.</p>
+          <span class="section-tag">EDUCATIONAL RESOURCE</span>
+          <h2>NON-VERBAL COMMUNICATION GUIDE</h2>
+          <p>Understand the key communication behaviors evaluated during an AI-powered mock interview.</p>
         </div>
 
         <!-- Mehrabian 7-38-55 Rule Cards -->
@@ -221,68 +227,171 @@
           </div>
         </div>
 
-        <!-- Divisions & Categories of Non-Verbal Communication -->
-        <div class="section-header" style="margin-top: 48px;">
-          <span class="section-tag">CATEGORIES & DIVISIONS</span>
-          <h2>Divisions of Non-Verbal Body Language</h2>
-        </div>
-
-        <div class="tips-grid">
+        <!-- 5 Structured Content Cards for Non-Verbal Guide -->
+        <div class="guide-cards-container" style="margin-top: 40px; display: flex; flex-direction: column; gap: 24px;">
           
-          <!-- Division 1: Posture -->
-          <div class="tip-card">
-            <div class="tip-header">
-              <div class="tip-icon blue"><i class="fas fa-user-ninja"></i></div>
+          <!-- 1. Posture & Spinal Position -->
+          <div class="guide-card-row">
+            <div class="guide-card-left">
+              <div class="guide-card-icon blue"><i class="fas fa-user-ninja"></i></div>
+              <span class="guide-category-tag">BODY POSTURE</span>
+            </div>
+            <div class="guide-card-right">
               <h3>1. Posture & Spinal Position</h3>
+              <p class="guide-card-desc">Spinal alignment and upper body positioning convey interest, authority, and engagement during interviews.</p>
+              
+              <div class="guide-practices-grid">
+                <div class="practice-block good">
+                  <div class="block-title"><i class="fas fa-check-circle"></i> Good Practice</div>
+                  <ul>
+                    <li>Sit upright with back supported</li>
+                    <li>Keep shoulders naturally aligned</li>
+                    <li>Keep your head balanced over your neck</li>
+                  </ul>
+                </div>
+                <div class="practice-block avoid">
+                  <div class="block-title"><i class="fas fa-times-circle"></i> What to Avoid</div>
+                  <ul>
+                    <li>Excessive slouching over the desk or camera</li>
+                    <li>Leaning continuously to one side</li>
+                    <li>Repeated body swaying or restlessness</li>
+                  </ul>
+                </div>
+              </div>
             </div>
-            <ul class="tip-list">
-              <li><i class="fas fa-check-circle green"></i> <strong>Sit Upright:</strong> Keep shoulders square and chest open to display confidence.</li>
-              <li><i class="fas fa-times-circle red"></i> <strong>Avoid Slouching:</strong> Hunching forward over the camera conveys fatigue or lack of interest.</li>
-            </ul>
           </div>
 
-          <!-- Division 2: Eye Contact & Face -->
-          <div class="tip-card">
-            <div class="tip-header">
-              <div class="tip-icon cyan"><i class="fas fa-eye"></i></div>
-              <h3>2. Eye Contact & Facial Expressions</h3>
+          <!-- 2. Eye Contact & Visual Attention -->
+          <div class="guide-card-row">
+            <div class="guide-card-left">
+              <div class="guide-card-icon cyan"><i class="fas fa-eye"></i></div>
+              <span class="guide-category-tag">VISUAL GAZE</span>
             </div>
-            <ul class="tip-list">
-              <li><i class="fas fa-check-circle green"></i> <strong>Direct Camera Gaze:</strong> Look into the webcam lens while speaking (60-70% eye contact).</li>
-              <li><i class="fas fa-times-circle red"></i> <strong>Avoid Looking Down:</strong> Frequently averting gaze signals nervousness or uncertainty.</li>
-            </ul>
+            <div class="guide-card-right">
+              <h3>2. Eye Contact & Visual Attention</h3>
+              <p class="guide-card-desc">Direct camera gaze creates a sense of personal connection and demonstrates transparency and attentiveness.</p>
+              
+              <div class="guide-practices-grid">
+                <div class="practice-block good">
+                  <div class="block-title"><i class="fas fa-check-circle"></i> Good Practice</div>
+                  <ul>
+                    <li>Maintain direct gaze toward the camera lens while speaking</li>
+                    <li>Keep steady visual engagement (60–70% of response time)</li>
+                    <li>Blink naturally and maintain pleasant focus</li>
+                  </ul>
+                </div>
+                <div class="practice-block avoid">
+                  <div class="block-title"><i class="fas fa-times-circle"></i> What to Avoid</div>
+                  <ul>
+                    <li>Frequently looking down at notes or keyboard</li>
+                    <li>Averting eyes away repeatedly when answering</li>
+                    <li>Staring blankly off-camera for long durations</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Division 3: Gestures -->
-          <div class="tip-card">
-            <div class="tip-header">
-              <div class="tip-icon purple"><i class="fas fa-hand-holding"></i></div>
-              <h3>3. Gestures & Hand Control</h3>
+          <!-- 3. Facial Expressions -->
+          <div class="guide-card-row">
+            <div class="guide-card-left">
+              <div class="guide-card-icon green"><i class="fas fa-smile"></i></div>
+              <span class="guide-category-tag">EXPRESSION</span>
             </div>
-            <ul class="tip-list">
-              <li><i class="fas fa-check-circle green"></i> <strong>Controlled Gestures:</strong> Use smooth, natural hand gestures within camera frame to emphasize points.</li>
-              <li><i class="fas fa-times-circle red"></i> <strong>Stop Fidgeting:</strong> Avoid rapid hand movements, hair touching, finger tapping, or seat restlessness.</li>
-            </ul>
+            <div class="guide-card-right">
+              <h3>3. Facial Expressions</h3>
+              <p class="guide-card-desc">Facial responsiveness reflects warmth, enthusiasm, and emotional intelligence.</p>
+              
+              <div class="guide-practices-grid">
+                <div class="practice-block good">
+                  <div class="block-title"><i class="fas fa-check-circle"></i> Good Practice</div>
+                  <ul>
+                    <li>Smile naturally when greeting and at appropriate moments</li>
+                    <li>Keep an open, approachable neutral expression</li>
+                    <li>Allow facial movement to match spoken emphasis</li>
+                  </ul>
+                </div>
+                <div class="practice-block avoid">
+                  <div class="block-title"><i class="fas fa-times-circle"></i> What to Avoid</div>
+                  <ul>
+                    <li>Rigid, expressionless facial freeze</li>
+                    <li>Overly tense jaw or tight mouth posture</li>
+                    <li>Frequent exaggerated grimacing or frowning</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Division 4: Vocal Speech -->
-          <div class="tip-card">
-            <div class="tip-header">
-              <div class="tip-icon orange"><i class="fas fa-microphone-alt"></i></div>
-              <h3>4. Vocal Pace & Filler Words</h3>
+          <!-- 4. Hand Gestures & Movement -->
+          <div class="guide-card-row">
+            <div class="guide-card-left">
+              <div class="guide-card-icon purple"><i class="fas fa-hand-paper"></i></div>
+              <span class="guide-category-tag">GESTURES</span>
             </div>
-            <ul class="tip-list">
-              <li><i class="fas fa-check-circle green"></i> <strong>Steady Speed:</strong> Maintain a clear pace of 120–150 words per minute.</li>
-              <li><i class="fas fa-times-circle red"></i> <strong>Eliminate Fillers:</strong> Reduce words like <em>"um"</em>, <em>"uh"</em>, <em>"like"</em>, and <em>"basically"</em>.</li>
-            </ul>
+            <div class="guide-card-right">
+              <h3>4. Hand Gestures & Movement</h3>
+              <p class="guide-card-desc">Purposeful hand movements reinforce spoken points and clarify complex technical explanations.</p>
+              
+              <div class="guide-practices-grid">
+                <div class="practice-block good">
+                  <div class="block-title"><i class="fas fa-check-circle"></i> Good Practice</div>
+                  <ul>
+                    <li>Use open palm gestures within the camera view</li>
+                    <li>Keep gestures smooth, moderate, and expressive</li>
+                    <li>Rest hands naturally when not emphasizing points</li>
+                  </ul>
+                </div>
+                <div class="practice-block avoid">
+                  <div class="block-title"><i class="fas fa-times-circle"></i> What to Avoid</div>
+                  <ul>
+                    <li>Rapid, frantic hand flailing outside the frame</li>
+                    <li>Touching your face, hair, or glasses repeatedly</li>
+                    <li>Clenching fists or hiding hands entirely</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Vocal Pace & Filler Words -->
+          <div class="guide-card-row">
+            <div class="guide-card-left">
+              <div class="guide-card-icon orange"><i class="fas fa-microphone-alt"></i></div>
+              <span class="guide-category-tag">VOCAL DELIVERY</span>
+            </div>
+            <div class="guide-card-right">
+              <h3>5. Vocal Pace & Filler Words</h3>
+              <p class="guide-card-desc">Vocal clarity and controlled speaking speed convey confidence and technical mastery.</p>
+              
+              <div class="guide-practices-grid">
+                <div class="practice-block good">
+                  <div class="block-title"><i class="fas fa-check-circle"></i> Good Practice</div>
+                  <ul>
+                    <li>Maintain a steady speaking pace (120–150 WPM)</li>
+                    <li>Pause briefly between thoughts to gather ideas</li>
+                    <li>Enunciate key words clearly</li>
+                  </ul>
+                </div>
+                <div class="practice-block avoid">
+                  <div class="block-title"><i class="fas fa-times-circle"></i> What to Avoid</div>
+                  <ul>
+                    <li>Excessive filler words ("um", "uh", "like", "basically")</li>
+                    <li>Rushing through technical answers too quickly</li>
+                    <li>Monotone delivery or trailing off at sentence ends</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>
 
         <!-- Famous Quotes Section -->
-        <div class="section-header" style="margin-top: 48px;">
+        <div class="section-header" style="margin-top: 56px;">
           <span class="section-tag">WISDOM & QUOTES</span>
           <h2>Famous Sayings on Communication</h2>
+          <p>"Communication works for those who work at it."</p>
         </div>
 
         <div class="quotes-grid">
