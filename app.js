@@ -852,65 +852,214 @@ function updateLiveUIElements() {
   }
 }
 
-// Draw Skeleton & Landmarks on Live Canvas
+// Draw Dynamic Reference Lines, Pose Skeleton, and 21-Landmark Hand Skeleton on Overlay Canvas
 function drawOverlaySkeleton(ctx) {
   const w = elements.overlay.width;
   const h = elements.overlay.height;
   ctx.clearRect(0, 0, w, h);
 
-  // A. Pose Skeleton
-  if (state.latestPoseLandmarks) {
-    const lm = state.latestPoseLandmarks;
-    const drawLine = (i1, i2, color = '#38bdf8', width = 3) => {
-      if (lm[i1] && lm[i2] && lm[i1].visibility > 0.4 && lm[i2].visibility > 0.4) {
-        ctx.beginPath();
-        ctx.moveTo(lm[i1].x * w, lm[i1].y * h);
-        ctx.lineTo(lm[i2].x * w, lm[i2].y * h);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.stroke();
-      }
-    };
-
-    // Shoulder line
-    drawLine(11, 12, '#38bdf8', 4);
-    // Spine
-    const sMidX = (lm[11].x + lm[12].x) / 2 * w;
-    const sMidY = (lm[11].y + lm[12].y) / 2 * h;
-    const hMidX = (lm[23].x + lm[24].x) / 2 * w;
-    const hMidY = (lm[23].y + lm[24].y) / 2 * h;
-
-    ctx.beginPath();
-    ctx.moveTo(sMidX, sMidY);
-    ctx.lineTo(hMidX, hMidY);
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+  // Status color for posture guides based on live posture evaluation
+  let statusColor = '#34d399'; // Default Good (Emerald Green)
+  if (state.metrics.postureStatus === 'WARNING' || state.metrics.postureState.includes('Slouch') || state.metrics.postureState.includes('Lean')) {
+    statusColor = '#fbbf24'; // Warning (Amber Gold)
+  } else if (state.metrics.postureStatus === 'POOR') {
+    statusColor = '#f43f5e'; // Poor (Rose Red)
   }
 
-  // B. Face Mesh Subset (Eyes, Mouth, Oval)
+  // A. POSTURE REFERENCE LINES & POSE LANDMARKS
+  if (state.latestPoseLandmarks) {
+    const lm = state.latestPoseLandmarks;
+
+    const hasShoulders = lm[11] && lm[12] && lm[11].visibility > 0.3 && lm[12].visibility > 0.3;
+    const hasHips = lm[23] && lm[24] && lm[23].visibility > 0.3 && lm[24].visibility > 0.3;
+    const hasNose = lm[0] && lm[0].visibility > 0.3;
+
+    if (hasShoulders && hasHips) {
+      const sLeft = { x: lm[11].x * w, y: lm[11].y * h };
+      const sRight = { x: lm[12].x * w, y: lm[12].y * h };
+      const hLeft = { x: lm[23].x * w, y: lm[23].y * h };
+      const hRight = { x: lm[24].x * w, y: lm[24].y * h };
+
+      const shoulderCenter = { x: (sLeft.x + sRight.x) / 2, y: (sLeft.y + sRight.y) / 2 };
+      const hipCenter = { x: (hLeft.x + hRight.x) / 2, y: (hLeft.y + hRight.y) / 2 };
+      const bodyCenter = { x: (shoulderCenter.x + hipCenter.x) / 2, y: (shoulderCenter.y + hipCenter.y) / 2 };
+
+      // 1. Vertical Posture Alignment Reference Line (Head -> Body Center -> Lower Body)
+      const topY = hasNose ? Math.max(10, lm[0].y * h - 25) : Math.max(10, shoulderCenter.y - 90);
+      const bottomY = Math.min(h - 10, hipCenter.y + 70);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([6, 4]);
+      ctx.moveTo(bodyCenter.x, topY);
+      ctx.lineTo(bodyCenter.x, bottomY);
+      ctx.strokeStyle = statusColor;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = statusColor;
+      ctx.shadowBlur = 6;
+      ctx.stroke();
+      ctx.restore();
+
+      // 2. Horizontal Shoulder Line (Left Shoulder -> Right Shoulder)
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([]);
+      ctx.moveTo(sLeft.x, sLeft.y);
+      ctx.lineTo(sRight.x, sRight.y);
+      ctx.strokeStyle = statusColor;
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = statusColor;
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.restore();
+
+      // 3. Horizontal Hip Line (Left Hip -> Right Hip)
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([]);
+      ctx.moveTo(hLeft.x, hLeft.y);
+      ctx.lineTo(hRight.x, hRight.y);
+      ctx.strokeStyle = statusColor;
+      ctx.lineWidth = 3.0;
+      ctx.stroke();
+      ctx.restore();
+
+      // 4. Head / Neck Alignment Guide Line (Nose -> Shoulder Center)
+      if (hasNose) {
+        const nosePt = { x: lm[0].x * w, y: lm[0].y * h };
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.moveTo(nosePt.x, nosePt.y);
+        ctx.lineTo(shoulderCenter.x, shoulderCenter.y);
+        ctx.strokeStyle = '#f3e5ab';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 5. Spine Center Line (Shoulder Center -> Hip Center)
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([]);
+      ctx.moveTo(shoulderCenter.x, shoulderCenter.y);
+      ctx.lineTo(hipCenter.x, hipCenter.y);
+      ctx.strokeStyle = statusColor;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+      ctx.restore();
+
+      // 6. Pose Landmark Dots (Nose, Ears, Shoulders, Hips)
+      const poseKeypoints = [0, 7, 8, 11, 12, 23, 24];
+      poseKeypoints.forEach(idx => {
+        if (lm[idx] && lm[idx].visibility > 0.3) {
+          ctx.beginPath();
+          ctx.arc(lm[idx].x * w, lm[idx].y * h, 4.5, 0, 2 * Math.PI);
+          ctx.fillStyle = statusColor;
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 4;
+          ctx.fill();
+        }
+      });
+
+      // Shoulder alignment label on overlay
+      const shoulderSlope = Math.abs(sLeft.y - sRight.y);
+      const shoulderAlignText = shoulderSlope < (h * 0.035) ? "Shoulders: ALIGNED" : "Shoulders: UNEVEN";
+      ctx.font = '700 11px sans-serif';
+      ctx.fillStyle = statusColor;
+      ctx.fillText(shoulderAlignText, sLeft.x - 10, Math.min(sLeft.y, sRight.y) - 10);
+    }
+  }
+
+  // B. FACE MESH SUBSET
   if (state.latestFaceLandmarks) {
     const lm = state.latestFaceLandmarks;
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+    ctx.fillStyle = 'rgba(243, 229, 171, 0.7)';
     [10, 152, 234, 454, 61, 291, 33, 263].forEach(idx => {
       if (lm[idx]) {
         ctx.beginPath();
-        ctx.arc(lm[idx].x * w, lm[idx].y * h, 2.5, 0, 2 * Math.PI);
+        ctx.arc(lm[idx].x * w, lm[idx].y * h, 2, 0, 2 * Math.PI);
         ctx.fill();
       }
     });
   }
 
-  // C. Hands Joints
+  // C. MEDIAPIPE HANDS (Complete 21-Landmark Skeleton for BOTH Hands + Movement Trail)
+  if (!state.wristTrail) state.wristTrail = [];
+
   if (state.latestHandLandmarks && state.latestHandLandmarks.length > 0) {
-    ctx.fillStyle = '#c084fc';
+    const handBones = [
+      // Thumb
+      [0, 1], [1, 2], [2, 3], [3, 4],
+      // Index Finger
+      [0, 5], [5, 6], [6, 7], [7, 8],
+      // Middle Finger
+      [0, 9], [9, 10], [10, 11], [11, 12],
+      // Ring Finger
+      [0, 13], [13, 14], [14, 15], [15, 16],
+      // Pinky
+      [0, 17], [17, 18], [18, 19], [19, 20],
+      // Palm Connections
+      [5, 9], [9, 13], [13, 17]
+    ];
+
     state.latestHandLandmarks.forEach(hand => {
-      hand.forEach(pt => {
+      // Record Wrist Position for Movement Trail
+      if (hand[0]) {
+        state.wristTrail.push({ x: hand[0].x * w, y: hand[0].y * h });
+        if (state.wristTrail.length > 18) state.wristTrail.shift();
+      }
+
+      // 1. Draw 21 Hand Skeleton Bones
+      handBones.forEach(([i1, i2]) => {
+        if (hand[i1] && hand[i2]) {
+          ctx.beginPath();
+          ctx.moveTo(hand[i1].x * w, hand[i1].y * h);
+          ctx.lineTo(hand[i2].x * w, hand[i2].y * h);
+          ctx.strokeStyle = '#c084fc';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+      });
+
+      // 2. Draw 21 Landmark Joint Dots
+      hand.forEach((pt, idx) => {
+        const isFingertip = [4, 8, 12, 16, 20].includes(idx);
         ctx.beginPath();
-        ctx.arc(pt.x * w, pt.y * h, 3, 0, 2 * Math.PI);
+        ctx.arc(pt.x * w, pt.y * h, isFingertip ? 4.5 : 3, 0, 2 * Math.PI);
+        ctx.fillStyle = isFingertip ? '#34d399' : '#f3e5ab';
+        ctx.shadowColor = isFingertip ? '#34d399' : 'transparent';
+        ctx.shadowBlur = isFingertip ? 6 : 0;
         ctx.fill();
       });
     });
+
+    // 3. Draw Wrist Movement Trail
+    if (state.wristTrail.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      for (let i = 0; i < state.wristTrail.length - 1; i++) {
+        const p1 = state.wristTrail[i];
+        const p2 = state.wristTrail[i + 1];
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // On-Canvas Hand Detection Badge
+    ctx.font = '800 12px sans-serif';
+    ctx.fillStyle = '#c084fc';
+    ctx.fillText(`HAND DETECTED (${state.latestHandLandmarks.length}) - ${state.metrics.gestureState || 'ACTIVE'}`, 12, 24);
+  } else {
+    state.wristTrail = [];
+    ctx.font = '700 11px sans-serif';
+    ctx.fillStyle = 'rgba(232, 216, 200, 0.7)';
+    ctx.fillText('NO HAND DETECTED', 12, 24);
   }
 }
 
