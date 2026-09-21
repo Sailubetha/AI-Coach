@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Interview Assistant</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif;}
+body{background:linear-gradient(135deg,#256c1a,#1f33b2,#fdbb2d);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px;color:#333;}
+.container{width:100%;max-width:1200px;background:rgba(255,255,255,0.95);border-radius:20px;overflow:hidden;box-shadow:0 15px 30px rgba(0,0,0,0.2);}
+.screen{padding:30px;display:none;}
+.screen.active{display:block;}
+.welcome-screen{text-align:center;}
+.app-title{font-size:2.5rem;color:#2c3e50;margin-bottom:10px;}
+.app-subtitle{font-size:1.2rem;color:#7f8c8d;margin-bottom:40px;}
+.form-group{margin-bottom:25px;text-align:left;max-width:500px;margin:0 auto 25px;}
+label{display:block;margin-bottom:8px;font-weight:600;color:#2c3e50;}
+input,select{width:100%;padding:15px;border:2px solid #ddd;border-radius:10px;font-size:16px;transition:border-color 0.3s;}
+input:focus,select:focus{border-color:#3498db;outline:none;}
+.btn{padding:15px 30px;background:#3498db;color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;transition:background 0.3s, transform 0.2s;}
+.btn:hover{background:#3498db;transform:translateY(-2px);}
+.btn:active{transform:translateY(0);}
+.interview-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #eee;}
+.timer{font-size:1.5rem;font-weight:700;color:#e74c3c;}
+.question-container{text-align:center;margin-bottom:30px;}
+.question{font-size:2rem;color:#2c3e50;margin-bottom:20px;padding:20px;background:#f8f9fa;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.05);}
+.interview-content{display:flex;gap:30px;margin-bottom:30px;}
+.webcam-container{flex:1;background:#2c3e50;border-radius:15px;overflow:hidden;position:relative;height:480px;display:flex;justify-content:center;align-items:center;color:white;font-size:1.2rem;box-shadow:0 10px 25px rgba(0,0,0,0.2);}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;}
+.feedback-panel{flex:1;background:#ecf0f1;border-radius:15px;padding:20px;overflow-y:auto;max-height:480px;box-shadow:0 10px 25px rgba(0,0,0,0.1);}
+.feedback-section{margin-bottom:25px;}
+.feedback-title{font-size:1.3rem;color:#2c3e50;margin-bottom:15px;padding-bottom:10px;border-bottom:2px solid #bdc3c7;}
+.feedback-item{padding:12px 15px;margin-bottom:12px;border-radius:8px;background:white;box-shadow:0 3px 10px rgba(0,0,0,0.08);display:flex;align-items:center;}
+.feedback-item i{margin-right:10px;font-size:1.2rem;}
+#summaryArea{display:none; margin-top:20px;}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Welcome Screen -->
+  <div class="screen welcome-screen active" id="inputPage">
+    <h1 class="app-title">AI Body Language Coach</h1>
+    <p class="app-subtitle">Get real-time feedback on your posture, gestures, and expressions</p>
+    <div class="form-group">
+      <label for="username">Your good Name</label>
+      <input type="text" id="username" placeholder="Enter your name">
+    </div>
+    <div class="form-group">
+      <label for="role">Role Applying For</label>
+      <select id="role">
+        <option value="">Select a role</option>
+        <option value="Software Engineer">Software Engineer</option>
+        <option value="Product Manager">Product Manager</option>
+        <option value="Data Scientist">Data Scientist</option>
+        <option value="UX Designer">UX Designer</option>
+        <option value="Marketing Manager">Marketing Manager</option>
+      </select>
+    </div>
+    <button class="btn" id="startBtn">Begin Interview</button>
+  </div>
+
+  <!-- Interview Screen -->
+  <div class="screen interview-screen" id="interviewPage">
+    <div class="interview-header">
+      <div class="user-info">
+        <h2 id="user-role"></h2>
+        <p>Candidate: <span id="display-name"></span></p>
+      </div>
+      <div class="timer" id="timer">02:00</div>
+    </div>
+
+    <div class="question-container">
+      <div class="question" id="current-question"></div>
+    </div>
+
+    <div class="interview-content">
+      <div class="webcam-container">
+        <video id="webcam" autoplay playsinline muted width="640" height="480"></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="feedback-panel">
+        <div class="feedback-section">
+          <h3 class="feedback-title">Posture Feedback</h3>
+          <div class="feedback-item"><i class="fas fa-info-circle"></i><span id="postureFeedback">Waiting for posture...</span></div>
+        </div>
+        <div class="feedback-section">
+          <h3 class="feedback-title">Gesture Feedback</h3>
+          <div class="feedback-item"><i class="fas fa-info-circle"></i><span id="gestureFeedback">Waiting for gestures...</span></div>
+        </div>
+        <div class="feedback-section">
+          <h3 class="feedback-title">Expression Feedback</h3>
+          <div class="feedback-item"><i class="fas fa-info-circle"></i><span id="faceFeedback">Waiting for expression...</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:10px;">
+      <button class="btn" id="nextBtn">Next Question</button>
+      <button class="btn" id="stopBtn">Stop Interview</button>
+    </div>
+
+    <div id="summaryArea">
+      <h3 style="text-align:center;">Interview Summary</h3>
+      <canvas id="summaryChart" width="400" height="400"></canvas>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// ---------------- CONFIG ----------------
+const QUESTIONS = [
+  "Tell me about yourself and your background.",
+  "Why are you interested in this role?",
+  "What are your greatest strengths?",
+  "Describe a challenge you overcame.",
+  "Where do you see yourself in 5 years?"
+];
+const QUESTION_TIME = 120; // 2 minutes
+
+// Elements
+const nameInput = document.getElementById('username');
+const roleInput = document.getElementById('role');
+const questionEl = document.getElementById('current-question');
+const timerEl = document.getElementById('timer');
+const postureFeedback = document.getElementById('postureFeedback');
+const gestureFeedback = document.getElementById('gestureFeedback');
+const faceFeedback = document.getElementById('faceFeedback');
+const overlay = document.getElementById('overlay');
+const displayName = document.getElementById('display-name');
+const userRole = document.getElementById('user-role');
+
+let cameraInstance = null;
+let pose, faceMesh, hands;
+let qIndex=0, questionTimer, remaining=QUESTION_TIME;
+let summaryCounts={postureGood:0, postureBad:0, gestureGood:0, gestureBad:0, faceGood:0, faceBad:0};
+let lastRightWrist=null;
+
+const ctx = overlay.getContext('2d');
+
+function formatTime(s){ const m=Math.floor(s/60); const sec=s%60; return `${m}:${sec.toString().padStart(2,'0')}`; }
+function toXY(lm){ return { x: overlay.width - lm.x*overlay.width, y: lm.y*overlay.height }; }
+function drawCircle(x,y,r=5,color='lime'){ ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+function drawLine(a,b,color='lime',w=3){ ctx.strokeStyle=color; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+
+// ---------------- MEDIAPIPE ----------------
+function setupMediaPipe(){
+  pose = new Pose({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`});
+  pose.setOptions({modelComplexity:1,smoothLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+  pose.onResults(onPoseResults);
+
+  faceMesh = new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+  faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+  faceMesh.onResults(onFaceResults);
+
+  hands = new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+  hands.onResults(onHandsResults);
+}
+
+// ---------------- CAMERA ----------------
+function startCamera(){
+  cameraInstance = new Camera(document.getElementById('webcam'), {
+    onFrame: async ()=>{ await pose.send({image:document.getElementById('webcam')}); await faceMesh.send({image:document.getElementById('webcam')}); await hands.send({image:document.getElementById('webcam')}); },
+    width:640,height:480
+  });
+  cameraInstance.start();
+}
+function stopCamera(){ if(cameraInstance){cameraInstance.stop();cameraInstance=null;} }
+
+// ---------------- POSE ----------------
+function onPoseResults(res){
+  overlay.width=640; overlay.height=480;
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  if(!res.poseLandmarks){ postureFeedback.textContent='No person detected'; return; }
+  const lm=res.poseLandmarks;
+  const leftShoulder=toXY(lm[11]), rightShoulder=toXY(lm[12]);
+  const leftElbow=toXY(lm[13]), rightElbow=toXY(lm[14]);
+  const leftWrist=toXY(lm[15]), rightWrist=toXY(lm[16]);
+  const leftHip=toXY(lm[23]), rightHip=toXY(lm[24]);
+  const nose=toXY(lm[0]);
+
+  drawLine(leftShoulder,rightShoulder,'lime');
+  drawLine(nose,{x:(leftHip.x+rightHip.x)/2,y:(leftHip.y+rightHip.y)/2}, 'lime');
+  drawLine(leftShoulder,leftElbow,'lime'); drawLine(leftElbow,leftWrist,'lime');
+  drawLine(rightShoulder,rightElbow,'lime'); drawLine(rightElbow,rightWrist,'lime');
+  [leftShoulder,rightShoulder,leftElbow,rightElbow,leftWrist,rightWrist,nose].forEach(p=>drawCircle(p.x,p.y,4,'lime'));
+
+  // --- Improved posture detection ---
+  const shoulderSlope = Math.abs(lm[11].y - lm[12].y);
+  const avgEarToShoulder = (Math.abs(lm[7].y - lm[11].y) + Math.abs(lm[8].y - lm[12].y)) / 2;
+  const headForward = Math.abs(lm[0].x - ((lm[11].x + lm[12].x)/2));
+  const spineAngle = Math.atan2((lm[23].y + lm[24].y)/2 - lm[0].y, (lm[23].x + lm[24].x)/2 - lm[0].x) * (180/Math.PI);
+
+  let msg='Good posture', color='green';
+  if(avgEarToShoulder < 0.22 || spineAngle < 70){ msg='Slouching — sit upright'; color='red'; summaryCounts.postureBad++; }
+  else if(shoulderSlope > 0.06){ msg='Uneven shoulders — adjust'; color='orange'; summaryCounts.postureBad++; }
+  else if(headForward > 0.10){ msg='Head forward — pull back'; color='orange'; summaryCounts.postureBad++; }
+  else summaryCounts.postureGood++;
+
+  postureFeedback.textContent = msg;
+  postureFeedback.style.color = color;
+  lastRightWrist=rightWrist;
+}
+function detectHandGesture(hand){
+    // If no hand or incomplete data, return "No hand"
+    if(!hand || hand.length < 21){
+        return ['No hand detected','gray'];
+    }
+
+    // Normalize by hand size (distance wrist–middle MCP)
+    const handSize = Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y);
+    if(handSize < 0.05){ 
+        // tiny size means it’s far away / not reliable
+        return ['No hand detected','gray']; 
+    }
+
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) / handSize;
+
+    const indexUp = hand[8].y < hand[6].y;
+    const middleUp = hand[12].y < hand[10].y;
+    const ringUp = hand[16].y < hand[14].y;
+    const pinkyUp = hand[20].y < hand[18].y;
+    // Use relative position of thumb tip vs wrist for robustness
+
+
+
+    // Gestures
+    const isFist = dist(hand[0], hand[8]) < 0.3 && dist(hand[0], hand[12]) < 0.3;
+    const isOpenPalm = indexUp && middleUp && ringUp && pinkyUp;
+    const isPeace = indexUp && middleUp && !ringUp && !pinkyUp;
+    const isOK = dist(hand[4], hand[8]) < 0.25 && middleUp && ringUp && pinkyUp;
+    const isPointing = indexUp && !middleUp && !ringUp && !pinkyUp;
+
+    // Movement detection
+  // Movement detection (stricter)
+let movement='';
+if(lastRightWrist){
+    const dx = (hand[0].x*overlay.width - lastRightWrist.x)/overlay.width;
+    const dy = (hand[0].y*overlay.height - lastRightWrist.y)/overlay.height;
+    const dist = Math.hypot(dx, dy);
+
+    // Only flag if movement is VERY large (like dancing / waving wildly)
+    if(dist > 0.30) movement = 'Excessive hand movement (distracting)';
+}
+lastRightWrist = {x:hand[0].x*overlay.width, y:hand[0].y*overlay.height};
+
+    // Return gesture
+    
+
+    if(isFist) return ['Fist','orange'];
+    else if(isPeace) return ['Peace Sign','green'];
+    else if(isOK) return ['OK Sign','green'];
+    else if(isPointing) return ['Pointing','blue'];
+    else if(isOpenPalm) return ['Open Palm / Stop','green'];
+    else if(movement) return [movement,'orange'];
+    else return ['Good gesture','green'];
+}
+
+
+function onHandsResults(res){
+  // ✅ If no hand detected
+  if(!res.multiHandLandmarks || res.multiHandLandmarks.length === 0){
+    gestureFeedback.textContent = "No hand detected";
+    gestureFeedback.style.color = "gray";
+    lastRightWrist = null; // reset movement tracking
+    return;
+  }
+
+  // If hands detected, process them
+  res.multiHandLandmarks.forEach(hand=>{
+    const connections=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20]];
+
+    // Draw hand skeleton
+    connections.forEach(([a,b])=>
+      drawLine(
+        {x:hand[a].x*overlay.width,y:hand[a].y*overlay.height},
+        {x:hand[b].x*overlay.width,y:hand[b].y*overlay.height},
+        'cyan'
+      )
+    );
+    hand.forEach(lm=>drawCircle(lm.x*overlay.width, lm.y*overlay.height,4,'cyan'));
+
+    // Detect gesture
+    const [gestureMsg, color] = detectHandGesture(hand);
+    gestureFeedback.textContent = gestureMsg;
+    gestureFeedback.style.color = color;
+    if(color==='green') summaryCounts.gestureGood++;
+    else if(color!=='black') summaryCounts.gestureBad++; // ignore "no hand" case
+  });
+}
+
+
+// ---------------- FACE ----------------
+function detectFaceExpression(fl){
+    const eyeDist = Math.hypot(fl[33].x - fl[263].x, fl[33].y - fl[263].y);
+    const mouthWidth = Math.hypot(fl[61].x - fl[291].x, fl[61].y - fl[291].y) / eyeDist;
+    const mouthOpen  = Math.abs(fl[14].y - fl[13].y) / eyeDist;
+    const leftEyeOpen  = Math.abs(fl[159].y - fl[145].y) / eyeDist;
+    const rightEyeOpen = Math.abs(fl[386].y - fl[374].y) / eyeDist;
+    const browRaise = ((fl[159].y - fl[105].y) + (fl[386].y - fl[334].y)) / (2 * eyeDist);
+    const lipTilt = (fl[61].y - fl[291].y) / eyeDist;
+
+    // Smiling / Confident
+    if(mouthWidth > 0.32 && browRaise > 0.02) 
+        return ['Smiling / Confident', 'green'];
+
+    // Surprised (lowered thresholds)
+    if(mouthOpen > 0.12 && browRaise > 0.03) 
+        return ['Surprised', 'orange'];
+
+    // Angry / Stressed (check eyebrow slope and eye squint)
+    const browSlope = (fl[105].y - fl[159].y + fl[334].y - fl[386].y) / (2 * eyeDist);
+    if(browSlope > 0.02 && mouthOpen < 0.08) 
+        return ['Angry / Stressed', 'red'];
+
+    // Sleepy / Low energy
+    if(leftEyeOpen < 0.03 && rightEyeOpen < 0.03) 
+        return ['Sleepy / Low energy', 'orange'];
+
+    // Mocking / Sarcastic (lower lip tilt threshold)
+    if(Math.abs(lipTilt) > 0.04 && mouthWidth > 0.30) 
+        return ['Mocking / Sarcastic', 'red'];
+
+    return ['Neutral / Attentive', 'blue'];
+}
+
+
+
+
+
+function onFaceResults(res){
+  if(!res.multiFaceLandmarks || res.multiFaceLandmarks.length==0) { faceFeedback.textContent='No face detected'; return; }
+  const fl=res.multiFaceLandmarks[0];
+  const [msg, color] = detectFaceExpression(fl);
+  faceFeedback.textContent = msg;
+  faceFeedback.style.color = color;
+  if(color==='green') summaryCounts.faceGood++; else summaryCounts.faceBad++;
+}
+
+// ---------------- INTERVIEW FLOW ----------------
+async function startInterview(){
+  if(!nameInput.value || !roleInput.value){ 
+    alert('Enter name and role'); 
+    return; 
+  }
+
+  // ---------------- SAVE TO BACKEND ----------------
+  try {
+    await fetch("http://localhost:5000/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nameInput.value, role: roleInput.value })
+    });
+    console.log("✅ Registration saved to backend");
+  } catch (err) {
+    console.error("❌ Error saving registration:", err);
+  }
+  // --------------------------------------------------
+
+  // ---------------- INTERVIEW UI ----------------
+  document.getElementById('inputPage').classList.remove('active');
+  document.getElementById('interviewPage').classList.add('active');
+
+  displayName.textContent = nameInput.value;
+  userRole.textContent = roleInput.value;
+  questionEl.textContent = QUESTIONS[qIndex];
+  remaining = QUESTION_TIME;
+  timerEl.textContent = formatTime(remaining);
+
+  setupMediaPipe();
+  startCamera();
+
+  questionTimer = setInterval(() => {
+    remaining--;
+    timerEl.textContent = formatTime(remaining);
+    if(remaining <= 0){ nextQuestion(); }
+  }, 1000);
+}
+
+
+function nextQuestion(){
+  qIndex++;
+  if(qIndex>=QUESTIONS.length){ stopInterview(); return; }
+  questionEl.textContent=QUESTIONS[qIndex];
+  remaining=QUESTION_TIME;
+  timerEl.textContent=formatTime(remaining);
+}
+
+function stopInterview(){
+  clearInterval(questionTimer);
+  stopCamera();
+  document.getElementById('summaryArea').style.display='block';
+  const ctxSummary=document.getElementById('summaryChart').getContext('2d');
+  new Chart(ctxSummary,{type:'bar',data:{labels:['Posture','Gesture','Face'],datasets:[{label:'Good',data:[summaryCounts.postureGood,summaryCounts.gestureGood,summaryCounts.faceGood],backgroundColor:'lime'},{label:'Needs Improvement',data:[summaryCounts.postureBad,summaryCounts.gestureBad,summaryCounts.faceBad],backgroundColor:'red'}]},options:{responsive:true,plugins:{legend:{position:'top'},title:{display:true,text:'Interview Feedback Summary'}}}});
+}
+
+// ---------------- EVENTS ----------------
+document.getElementById('startBtn').addEventListener('click', startInterview);
+
+document.getElementById('nextBtn').addEventListener('click', nextQuestion);
+document.getElementById('stopBtn').addEventListener('click', stopInterview);
+</script>
+
+</body>
+</html>
+
+
+

@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Interview & Communication Coach - Real-Time Multimodal Vision System</title>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- 3D Vanta HALO & Three.js Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.halo.min.js"></script>
+
+  <!-- AI & Computer Vision Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- 3D Vanta HALO Interactive Background Container -->
+  <div id="vanta-bg"></div>
+
+  <div class="app-wrapper">
+    
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="brand" id="navBrandLink">
+        <div class="brand-icon"><i class="fas fa-brain"></i></div>
+        <div>
+          <div class="brand-title">AI Communication Coach</div>
+          <div class="brand-subtitle">Multimodal Speech & Computer Vision Interview System</div>
+        </div>
+      </div>
+
+      <!-- Main Navigation Links -->
+      <nav class="main-nav">
+        <button class="nav-link active" id="navHome"><i class="fas fa-home"></i> Home</button>
+        <button class="nav-link" id="navGuide"><i class="fas fa-book-open"></i> Non-Verbal Guide</button>
+        <button class="nav-link" id="navDemo"><i class="fas fa-bolt"></i> Quick Demo (1-Q)</button>
+        <button class="nav-link" id="navInterview"><i class="fas fa-video"></i> Start AI Interview</button>
+        <button class="nav-link" id="navHistory"><i class="fas fa-history"></i> History & Progress</button>
+      </nav>
+
+      <!-- System Status Indicators -->
+      <div class="system-status-container">
+        <div class="status-pill" id="statusCamera" title="Webcam Status">
+          <div class="status-dot"></div> <span class="status-text">Camera</span>
+        </div>
+        <div class="status-pill" id="statusPose" title="MediaPipe Pose Detector">
+          <div class="status-dot"></div> <span class="status-text">Pose</span>
+        </div>
+        <div class="status-pill" id="statusFace" title="MediaPipe Face Mesh Detector">
+          <div class="status-dot"></div> <span class="status-text">Face</span>
+        </div>
+        <div class="status-pill" id="statusHands" title="MediaPipe Hands Detector">
+          <div class="status-dot"></div> <span class="status-text">Hands</span>
+        </div>
+        <div class="status-pill" id="statusGesture" title="Teachable Machine Gesture Model">
+          <div class="status-dot"></div> <span class="status-text">Gesture</span>
+        </div>
+        <div class="status-pill" id="statusSpeech" title="Web Speech STT API">
+          <div class="status-dot"></div> <span class="status-text">Speech</span>
+        </div>
+      </div>
+
+      <!-- User Profile & Auth Widget - FAR RIGHT CORNER -->
+      <div class="user-auth-widget">
+        <div id="userProfilePill" class="user-pill" style="display:none;">
+          <div class="avatar-circle"><i class="fas fa-user"></i></div>
+          <div class="user-info-text">
+            <span class="user-name" id="headerUserName">Candidate</span>
+            <span class="user-role" id="headerUserRole">Software Engineer</span>
+          </div>
+          <button class="btn-sm-logout" id="logoutBtn" title="Sign Out"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+        <button class="btn-auth" id="openAuthModalBtn">
+          <i class="fas fa-user-circle"></i> Login / Register
+        </button>
+      </div>
+    </header>
+
+    <!-- 0. AUTH MODAL -->
+    <div class="auth-modal-overlay" id="authModal">
+      <div class="auth-card">
+        <button class="close-modal-btn" id="closeAuthModalBtn">&times;</button>
+        <div class="auth-header">
+          <div class="auth-icon"><i class="fas fa-user-shield"></i></div>
+          <h2>Account Sign In & Sign Up</h2>
+          <p>Access saved practice history, analytics, and recurring weakness detection.</p>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabLogin">Sign In</button>
+          <button class="auth-tab" id="tabSignup">Create Account</button>
+        </div>
+
+        <form id="authForm" onsubmit="return false;">
+          <div class="form-group" id="groupName" style="display:none;">
+            <label for="authName">Full Name</label>
+            <input type="text" id="authName" class="form-control" placeholder="e.g. Alex Johnson">
+          </div>
+
+          <div class="form-group">
+            <label for="authEmail">Email Address</label>
+            <input type="email" id="authEmail" class="form-control" placeholder="name@example.com">
+          </div>
+
+          <div class="form-group">
+            <label for="authPassword">Password</label>
+            <input type="password" id="authPassword" class="form-control" placeholder="••••••••">
+          </div>
+
+          <div class="form-group" id="groupConfirmPassword" style="display:none;">
+            <label for="authConfirmPassword">Confirm Password</label>
+            <input type="password" id="authConfirmPassword" class="form-control" placeholder="Re-enter password">
+          </div>
+
+          <div class="form-group" id="groupRole" style="display:none;">
+            <label for="authRole">Target Career Role</label>
+            <select id="authRole" class="form-control">
+              <option value="Software Engineer">Software Engineer</option>
+              <option value="Data Analyst">Data Analyst</option>
+              <option value="Product Manager">Product Manager</option>
+              <option value="UX/UI Designer">UX/UI Designer</option>
+              <option value="Business Analyst">Business Analyst</option>
+            </select>
+          </div>
+
+          <div class="auth-error-msg" id="authErrorMsg"></div>
+
+          <button class="btn-primary" id="authSubmitBtn">Sign In to AI Coach</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 1. LANDING PAGE & EDUCATIONAL HOME SECTION -->
+    <main class="screen active" id="landingPage">
+      
+      <!-- HERO SECTION WITH 3D HUMAN SPEAKING & LEFT QUOTATION -->
+      <section class="hero-split-section">
+        
+        <!-- LEFT COLUMN: Quotation, Title & Call-to-Actions -->
+        <div class="hero-left-content">
+          <div class="hero-quote-box">
+            <i class="fas fa-quote-left quote-badge-icon"></i>
+            <p class="hero-quote-text">"The most important thing in communication is hearing what isn't said."</p>
+            <div class="hero-quote-author">– Peter Drucker</div>
+          </div>
+
+          <h1 class="hero-main-title">
+            Master Your Interview Presence with <span class="gradient-text">Real-Time AI Vision & Speech</span>
+          </h1>
+
+          <p class="hero-main-subtitle">
+            Evaluate body posture, eye contact, facial expressions, hand gestures, and spoken filler words in real time with our multimodal AI system.
+          </p>
+
+          <div class="hero-action-buttons">
+            <button class="btn-primary btn-hero" id="heroStartBtn">
+              <i class="fas fa-video"></i> Start AI Mock Interview
+            </button>
+            <button class="btn-secondary btn-hero" id="heroDemoBtn">
+              <i class="fas fa-bolt"></i> Try 1-Question Quick Demo
+            </button>
+            <button class="btn-outline btn-hero" id="heroGuideBtn">
+              <i class="fas fa-graduation-cap"></i> Non-Verbal Guide
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: SEAMLESS 3D DIGITAL ASSISTANT AVATAR WIDGET -->
+        <div class="hero-right-media">
+          <div class="hero-avatar-card blended-3d-avatar-card">
+            
+            <!-- Floating Unmute / Listen Control Toggle -->
+            <button class="avatar-unmute-toggle-btn" id="avatarUnmuteToggleBtn">
+              <i class="fas fa-volume-mute" id="unmuteIcon"></i>
+              <span id="unmuteLabel">Unmute / Listen</span>
+            </button>
+
+            <div class="avatar-soundwaves" id="presenterSoundwaves">
+              <div class="wave wave1"></div>
+              <div class="wave wave2"></div>
+              <div class="wave wave3"></div>
+            </div>
+            
+            <div class="avatar-img-container radial-blended-mask">
+              <img src="3d_avatar_woman_presenter.jpg" alt="Interactive 3D Digital Assistant Avatar" class="avatar-image model-3d-avatar" id="presenterImg">
+            </div>
+
+            <!-- Glassmorphic Subtitle Pill matching reference design -->
+            <div class="presenter-speech-subtitle-pill" id="presenterSpeechBubble">
+              <i class="fas fa-sparkles spark-icon"></i>
+              <p class="speech-script-text">
+                "Welcome! The most important thing in communication is hearing what isn't said. Our platform analyzes your posture, gestures, facial expressions, and speech confidence to help you master non-verbal communication."
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- SCROLLING DOWN: EDUCATIONAL NON-VERBAL BODY LANGUAGE SECTION -->
+      <section class="guide-section" id="guideSection">
+        
+        <div class="section-header">
+          <span class="section-tag">SCIENCE OF NON-VERBAL COMMUNICATION</span>
+          <h2>The Importance of Body Language in Interviews</h2>
+          <p>Over 90% of communication impact comes from non-verbal posture, facial expressions, and vocal inflection.</p>
+        </div>
+
+        <!-- Mehrabian 7-38-55 Rule Cards -->
+        <div class="rule-container">
+          <div class="rule-card">
+            <div class="rule-stat">55%</div>
+            <div class="rule-label">Body Language & Posture</div>
+            <p>Visual presence, eye contact, spinal alignment, facial engagement, and hand positioning.</p>
+          </div>
+          <div class="rule-card">
+            <div class="rule-stat">38%</div>
+            <div class="rule-label">Tone of Voice & Speech</div>
+            <p>Pace, speaking speed (WPM), vocal clarity, and eliminating distracting filler words.</p>
+          </div>
+          <div class="rule-card">
+            <div class="rule-stat">7%</div>
+            <div class="rule-label">Spoken Words</div>
+            <p>The literal definition of your technical answers and definitions.</p>
+          </div>
+        </div>
+
+        <!-- Divisions & Categories of Non-Verbal Communication -->
+        <div class="section-header" style="margin-top: 48px;">
+          <span class="section-tag">CATEGORIES & DIVISIONS</span>
+          <h2>Divisions of Non-Verbal Body Language</h2>
+        </div>
+
+        <div class="tips-grid">
+          
+          <!-- Division 1: Posture -->
+          <div class="tip-card">
+            <div class="tip-header">
+              <div class="tip-icon blue"><i class="fas fa-user-ninja"></i></div>
+              <h3>1. Posture & Spinal Position</h3>
+            </div>
+            <ul class="tip-list">
+              <li><i class="fas fa-check-circle green"></i> <strong>Sit Upright:</strong> Keep shoulders square and chest open to display confidence.</li>
+              <li><i class="fas fa-times-circle red"></i> <strong>Avoid Slouching:</strong> Hunching forward over the camera conveys fatigue or lack of interest.</li>
+            </ul>
+          </div>
+
+          <!-- Division 2: Eye Contact & Face -->
+          <div class="tip-card">
+            <div class="tip-header">
+              <div class="tip-icon cyan"><i class="fas fa-eye"></i></div>
+              <h3>2. Eye Contact & Facial Expressions</h3>
+            </div>
+            <ul class="tip-list">
+              <li><i class="fas fa-check-circle green"></i> <strong>Direct Camera Gaze:</strong> Look into the webcam lens while speaking (60-70% eye contact).</li>
+              <li><i class="fas fa-times-circle red"></i> <strong>Avoid Looking Down:</strong> Frequently averting gaze signals nervousness or uncertainty.</li>
+            </ul>
+          </div>
+
+          <!-- Division 3: Gestures -->
+          <div class="tip-card">
+            <div class="tip-header">
+              <div class="tip-icon purple"><i class="fas fa-hand-holding"></i></div>
+              <h3>3. Gestures & Hand Control</h3>
+            </div>
+            <ul class="tip-list">
+              <li><i class="fas fa-check-circle green"></i> <strong>Controlled Gestures:</strong> Use smooth, natural hand gestures within camera frame to emphasize points.</li>
+              <li><i class="fas fa-times-circle red"></i> <strong>Stop Fidgeting:</strong> Avoid rapid hand movements, hair touching, finger tapping, or seat restlessness.</li>
+            </ul>
+          </div>
+
+          <!-- Division 4: Vocal Speech -->
+          <div class="tip-card">
+            <div class="tip-header">
+              <div class="tip-icon orange"><i class="fas fa-microphone-alt"></i></div>
+              <h3>4. Vocal Pace & Filler Words</h3>
+            </div>
+            <ul class="tip-list">
+              <li><i class="fas fa-check-circle green"></i> <strong>Steady Speed:</strong> Maintain a clear pace of 120–150 words per minute.</li>
+              <li><i class="fas fa-times-circle red"></i> <strong>Eliminate Fillers:</strong> Reduce words like <em>"um"</em>, <em>"uh"</em>, <em>"like"</em>, and <em>"basically"</em>.</li>
+            </ul>
+          </div>
+
+        </div>
+
+        <!-- Famous Quotes Section -->
+        <div class="section-header" style="margin-top: 48px;">
+          <span class="section-tag">WISDOM & QUOTES</span>
+          <h2>Famous Sayings on Communication</h2>
+        </div>
+
+        <div class="quotes-grid">
+          <div class="quote-card">
+            <i class="fas fa-quote-left quote-icon"></i>
+            <p class="quote-text">"Your body language shapes who you are. Power poses increase confidence and lower stress."</p>
+            <div class="quote-author">
+              <div class="author-avatar"><i class="fas fa-brain"></i></div>
+              <div>
+                <div class="author-name">Amy Cuddy</div>
+                <div class="author-title">Harvard Social Psychologist</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="quote-card">
+            <i class="fas fa-quote-left quote-icon"></i>
+            <p class="quote-text">"What you do speaks so loudly that I cannot hear what you say."</p>
+            <div class="quote-author">
+              <div class="author-avatar"><i class="fas fa-pen-nib"></i></div>
+              <div>
+                <div class="author-name">Ralph Waldo Emerson</div>
+                <div class="author-title">Philosopher & Essayist</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="quote-card">
+            <i class="fas fa-quote-left quote-icon"></i>
+            <p class="quote-text">"Body language is a powerful tool. We had body language before we had speech."</p>
+            <div class="quote-author">
+              <div class="author-avatar"><i class="fas fa-feather-alt"></i></div>
+              <div>
+                <div class="author-name">Maya Angelou</div>
+                <div class="author-title">Poet & Author</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Simplified Launch Cards: Interview & Demo Only -->
+        <div class="launch-cards-container">
+          <div class="launch-card">
+            <div class="launch-icon yellow"><i class="fas fa-bolt"></i></div>
+            <h3>Quick Demo (1 Question)</h3>
+            <p>Fast 25-second test drive to verify webcam vision overlay, speech STT, and instant feedback alerts.</p>
+            <button class="btn-secondary" id="startDemoCardBtn"><i class="fas fa-play"></i> Launch Quick Demo</button>
+          </div>
+
+          <div class="launch-card highlight">
+            <div class="launch-icon green"><i class="fas fa-rocket"></i></div>
+            <h3>Full AI Practice Interview</h3>
+            <p>Practice 5 tailored interview questions with real-time speech transcription, MediaPipe posture tracking, and complete saved analytics report.</p>
+            <button class="btn-primary" id="startFullCardBtn"><i class="fas fa-video"></i> Start AI Interview</button>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- 2. SETUP SCREEN: SIMPLIFIED TO INTERVIEW & DEMO ONLY -->
+    <main class="screen" id="inputPage">
+      <div class="welcome-card">
+        <div class="welcome-header">
+          <h2>Candidate Practice Setup</h2>
+          <p>Real-time multimodal evaluation of body language posture, visual attention, gestures, and speech presence.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="username">Candidate Full Name</label>
+          <input type="text" id="username" class="form-control" placeholder="e.g. Alex Johnson" value="Fresher Candidate">
+        </div>
+
+        <div class="form-group">
+          <label for="role">Target Interview Role</label>
+          <select id="role" class="form-control">
+            <option value="Software Engineer">Software Engineer</option>
+            <option value="Data Analyst">Data Analyst</option>
+            <option value="Product Manager">Product Manager</option>
+            <option value="UX/UI Designer">UX/UI Designer</option>
+            <option value="Business Analyst">Business Analyst</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Practice Mode</label>
+          <div class="mode-toggle-group">
+            <div class="mode-option selected" id="modeNormal">
+              <h4>AI Practice Interview</h4>
+              <p>5 Questions / 90s each (Full Practice Session)</p>
+            </div>
+            <div class="mode-option" id="modeDemo">
+              <h4>Quick Demo Mode</h4>
+              <p>1 Question / 25s (Fast System Trial)</p>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-primary" id="startBtn">
+          <i class="fas fa-play"></i> Begin Multimodal AI Practice
+        </button>
+      </div>
+    </main>
+
+    <!-- 3. LIVE MULTIMODAL INTERVIEW DASHBOARD -->
+    <main class="screen" id="interviewPage">
+      <div class="dashboard-grid">
+        
+        <!-- LEFT PANEL: AI Conversation Chat Stream & Transcript -->
+        <div class="chat-panel-card">
+          <div class="chat-header">
+            <div>
+              <span class="scen-badge" id="liveScenBadge">AI INTERVIEW</span>
+              <div class="q-counter" id="qCounter">QUESTION 1 OF 5</div>
+            </div>
+            <div class="timer-badge" id="timer">01:30</div>
+          </div>
+
+          <div class="ai-prompt-box">
+            <div class="ai-avatar"><i class="fas fa-robot"></i></div>
+            <div class="ai-prompt-text" id="currentQuestion">
+              Loading AI interviewer question...
+            </div>
+          </div>
+
+          <!-- Speech Transcription Stream -->
+          <div class="transcript-box">
+            <div class="transcript-title">
+              <span><i class="fas fa-microphone-alt"></i> Your Live Speech Transcript</span>
+              <span style="font-size:0.75rem; color:var(--text-muted);" id="sttStatus">Listening...</span>
+            </div>
+            <div class="transcript-content" id="liveTranscript">
+              Start speaking into your microphone to transcribe your answer...
+            </div>
+          </div>
+
+          <!-- Speech Metrics Preview -->
+          <div class="speech-preview-row">
+            <div class="preview-item">
+              <div class="lbl">Speaking Speed</div>
+              <div class="val" id="liveWpmVal">0 WPM</div>
+            </div>
+            <div class="preview-item">
+              <div class="lbl">Filler Words</div>
+              <div class="val warning" id="liveFillersVal">0</div>
+            </div>
+            <div class="preview-item">
+              <div class="lbl">Fluency</div>
+              <div class="val" id="liveFluencyVal">80%</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT PANEL: Webcam + MediaPipe Vision Indicators -->
+        <div class="webcam-card">
+          <div class="video-container">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="overlay"></canvas>
+
+            <!-- MediaPipe Indicators (🟢 / 🟡) -->
+            <div class="overlay-detection-panel">
+              <div class="detection-pill" id="indicatorEye">
+                <div class="status-dot ready"></div> EYE CONTACT: <span class="val" id="valEyeContact">🟢 EYE CONTACT</span>
+              </div>
+              <div class="detection-pill" id="indicatorPosture">
+                <div class="status-dot ready"></div> POSTURE: <span class="val" id="valPosture">🟢 GOOD POSTURE</span>
+              </div>
+              <div class="detection-pill" id="indicatorHead">
+                <div class="status-dot ready"></div> HEAD STABILITY: <span class="val" id="valHead">🟢 HEAD STABLE</span>
+              </div>
+              <div class="detection-pill">
+                GESTURE: <span class="val" id="valGesture">INITIALIZING...</span>
+              </div>
+              <div class="detection-pill">
+                SPEECH: <span class="val" id="valSpeech">ACTIVE</span>
+              </div>
+            </div>
+
+            <!-- Overlay Legend -->
+            <div class="overlay-legend">
+              <div class="legend-item"><div class="legend-dot green"></div> 🟢 Good</div>
+              <div class="legend-item"><div class="legend-dot yellow"></div> 🟡 Attention</div>
+              <div class="legend-item"><div class="legend-dot red"></div> 🔴 Issue</div>
+            </div>
+          </div>
+
+          <!-- Live AI Coaching Stream -->
+          <div class="feedback-stream-box" style="margin-top:10px; height:180px;">
+            <div class="section-title">
+              <span><i class="fas fa-bolt"></i> Live AI Coaching Feed</span>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Real-Time Vision & Speech</span>
+            </div>
+            <div class="feedback-list" id="feedbackList">
+              <div class="feedback-card good">
+                <i class="fas fa-check-circle"></i>
+                <div class="feedback-content">
+                  <div class="msg">Multimodal Vision & Speech pipeline active.</div>
+                  <div class="time">Just now</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- BOTTOM ACTION CONTROLS BAR -->
+      <div class="controls-bar">
+        <div style="display:flex; align-items:center; gap:16px;">
+          Candidate: <strong id="displayName" style="color:var(--primary)">Fresher Candidate</strong> | 
+          Target Role: <strong id="displayRole" style="color:#0f172a">Software Engineer</strong>
+        </div>
+
+        <div style="display:flex; gap:12px;">
+          <button class="btn-secondary" id="nextBtn">
+            Next Question <i class="fas fa-arrow-right"></i>
+          </button>
+          <button class="btn-danger" id="stopBtn">
+            <i class="fas fa-stop"></i> End Interview & Generate Report
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 4. UNIFIED PERFORMANCE REPORT SCREEN -->
+    <main class="screen" id="reportPage">
+      <div class="report-card">
+        <div class="report-header">
+          <h2>Interview Performance & Analytics Report</h2>
+          <p>Multimodal Speech, NLP & MediaPipe Computer Vision Evaluation for <strong id="reportName" style="color:var(--primary)">Candidate</strong> (<span id="reportRole">Role</span>)</p>
+        </div>
+
+        <div style="text-align:center; margin-bottom:24px;">
+          <span style="font-size:0.95rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Overall Communication Presence Score</span>
+          <div style="font-size:3.5rem; font-weight:800; color:var(--primary);" id="reportScoreOverall">85 / 100</div>
+          <div style="font-size:0.82rem; color:var(--text-muted);">Formula: Language 35% + Speech 35% + Non-Verbal Vision 30%</div>
+        </div>
+
+        <!-- 3-Category Score Breakdown Grid -->
+        <div class="report-sections-grid">
+          
+          <div class="report-section-card">
+            <div class="card-title blue"><i class="fas fa-language"></i> Language (NLP)</div>
+            <div class="metric-line"><span>Grammar Precision</span><strong id="reportGrammarScore" style="color:var(--success)">82%</strong></div>
+            <div class="metric-line"><span>Vocabulary Complexity</span><strong id="reportVocabScore" style="color:var(--primary)">74%</strong></div>
+            <div class="metric-line"><span>Speech Fluency</span><strong id="reportFluencyScore" style="color:var(--accent)">78%</strong></div>
+          </div>
+
+          <div class="report-section-card">
+            <div class="card-title orange"><i class="fas fa-microphone-alt"></i> Speech & Delivery</div>
+            <div class="metric-line"><span>Speaking Speed</span><strong id="reportWpmText" style="color:var(--primary)">142 WPM</strong></div>
+            <div class="metric-line"><span>Filler Words Count</span><strong id="reportFillersText" style="color:var(--warning)">6</strong></div>
+            <div class="metric-line"><span>Fillers Breakdown</span><span id="reportFillersListText" style="font-size:0.8rem; color:var(--text-muted)">um (3), uh (2), like (1)</span></div>
+          </div>
+
+          <div class="report-section-card">
+            <div class="card-title green"><i class="fas fa-video"></i> Non-Verbal (MediaPipe)</div>
+            <div class="metric-line"><span>Camera Eye Contact</span><strong id="reportEyeContact" style="color:var(--success)">81%</strong></div>
+            <div class="metric-line"><span>Posture Alignment</span><strong id="reportPostureScore" style="color:var(--primary)">88%</strong></div>
+            <div class="metric-line"><span>Head Stability</span><strong id="reportHeadStability" style="color:var(--accent)">76%</strong></div>
+          </div>
+
+        </div>
+
+        <!-- Contextual AI Coaching Feedback Box -->
+        <div class="ai-feedback-container">
+          <h4><i class="fas fa-robot"></i> Personalized AI Coaching Feedback</h4>
+          <p id="reportAiFeedbackText">
+            "Your language was clear and your posture was consistent. You used several filler words while formulating your answers. Try pausing briefly instead of using filler words to boost your score."
+          </p>
+        </div>
+
+        <!-- Strengths & Recommendations -->
+        <div class="report-grid">
+          <div class="insight-section strengths">
+            <h4><i class="fas fa-thumbs-up"></i> Identified Strengths</h4>
+            <ul id="strengthsList"></ul>
+          </div>
+
+          <div class="insight-section improvements">
+            <h4><i class="fas fa-exclamation-triangle"></i> Areas to Improve</h4>
+            <ul id="improvementsList"></ul>
+          </div>
+        </div>
+
+        <div style="text-align:center; margin-top:30px; display:flex; justify-content:center; gap:16px;">
+          <button class="btn-secondary" id="saveAndDashBtn" style="max-width:280px;">
+            <i class="fas fa-home"></i> Back to Home
+          </button>
+          <button class="btn-primary" id="restartBtn" style="max-width:280px;">
+            <i class="fas fa-redo"></i> Practice Again
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 5. PROGRESS & HISTORY DASHBOARD -->
+    <main class="screen" id="historyPage">
+      <div class="history-card">
+        <div class="section-header">
+          <span class="section-tag">ANALYTICS & PROGRESS TRACKING</span>
+          <h2>Your Communication Development Over Time</h2>
+          <p>Track your development across practice sessions saved to the database.</p>
+        </div>
+
+        <!-- Progress Trend Chart -->
+        <div class="chart-box" style="margin-bottom:32px;">
+          <div style="position:relative; width:100%; height:320px;">
+            <canvas id="progressTrendChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Past Sessions Table -->
+        <div class="history-table-container">
+          <h3 style="color:#0f172a; margin-bottom:16px;"><i class="fas fa-history"></i> Saved Session History</h3>
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Scenario</th>
+                <th>Grammar</th>
+                <th>WPM</th>
+                <th>Fillers</th>
+                <th>Eye Contact</th>
+                <th>Overall Score</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <!-- Dynamically populated from backend database -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Custom Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
