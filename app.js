@@ -1,15 +1,16 @@
 /**
- * AI Communication Coach - Full-Stack Multimodal Platform Logic
- * Integrates Auth, Conversation AI, Web Speech STT, MediaPipe CV, DB Persistence, Progress Analytics & Weakness Engine
+ * AI Interview Coach for Freshers and Students - Real-Time Multimodal Vision & Speech System
+ * Robust MediaPipe Computer Vision (Pose, Face Mesh, Hands), Temporal Smoothing, NLP & Scoring
  */
 
 const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '5000' && window.location.port !== ''
   ? 'http://localhost:5000'
   : window.location.origin;
 
+// ---------------- 1. APPLICATION STATE ----------------
 let state = {
   authToken: localStorage.getItem('ai_coach_token') || null,
-  currentUser: null,
+  currentUser: { name: 'Fresher Candidate', role: 'Software Engineer' },
 
   currentScenario: 'Job Interview',
   isDemoMode: false,
@@ -19,6 +20,13 @@ let state = {
   remainingTime: 90,
   questionTimer: null,
   conversationTurns: [],
+  interviewQuestions: [
+    "Tell me about yourself and why you are interested in this position.",
+    "What is your greatest technical strength, and how have you demonstrated it in a project?",
+    "Describe a challenging situation or problem you faced and how you resolved it.",
+    "Where do you see yourself professionally in the next three to five years?",
+    "Do you have any questions for us regarding the team or company culture?"
+  ],
 
   // Vision Models
   pose: null,
@@ -28,26 +36,10 @@ let state = {
   webcamStream: null,
   animFrameId: null,
 
-  // Latest Landmark Frames & Indicators
+  // Latest Landmark Frames
   latestPoseLandmarks: null,
   latestHandLandmarks: [],
   latestFaceLandmarks: null,
-
-  // Indicators State
-  indicators: {
-    eyeContact: 'good', // 'good' or 'warning'
-    posture: 'good',
-    headStability: 'good'
-  },
-
-  // Accumulated Session Metrics
-  accumulated: {
-    totalFrames: 0,
-    eyeContactGoodFrames: 0,
-    postureGoodFrames: 0,
-    headStableFrames: 0,
-    gestureGoodFrames: 0
-  },
 
   // Speech & STT State
   speechRecognition: null,
@@ -62,36 +54,72 @@ let state = {
     wpm: 0
   },
 
-  // Analytics & Weaknesses
-  currentWeakness: null,
-  historySessions: []
+  // Temporal Smoothing Buffers (Last 15 Frames)
+  buffers: {
+    posture: [],
+    attention: [],
+    facial: [],
+    gesture: []
+  },
+
+  // Smoothed Current Metrics
+  metrics: {
+    postureState: 'Upright posture',
+    postureScore: 95,
+    postureStability: 95,
+    postureReason: 'Stable alignment',
+    postureStatus: 'GOOD',
+
+    attentionStatus: 'FACING CAMERA',
+    attentionScore: 95,
+    attentionText: 'Facing camera',
+
+    facialExpression: 'Neutral facial expression',
+    facialEngagementScore: 85,
+    facialStatus: 'GOOD',
+
+    gestureState: 'NATURAL',
+    gestureControlScore: 90,
+    gestureMovement: 'Moderate',
+    gestureReason: 'Natural communicative gestures',
+
+    overallNonVerbal: 90
+  },
+
+  // Question-Wise Metrics Log
+  questionSnapshots: [],
+
+  // Point-Loss Audit Log
+  pointLossAudit: [],
+  auditCounter: {
+    slouch: 0,
+    forwardHead: 0,
+    lean: 0,
+    lookAway: 0,
+    excessiveGesture: 0,
+    fillers: 0
+  }
 };
+
+let progressTrendChartInstance = null;
+let questionChartInstance = null;
 
 // ---------------- 2. DOM ELEMENTS MAPPING ----------------
 const elements = {
-  // Screens
   landingPage: document.getElementById('landingPage'),
   guideSection: document.getElementById('guideSection'),
   inputPage: document.getElementById('inputPage'),
-  dashboardPage: document.getElementById('dashboardPage'),
-  scenarioPage: document.getElementById('scenarioPage'),
   interviewPage: document.getElementById('interviewPage'),
   reportPage: document.getElementById('reportPage'),
   historyPage: document.getElementById('historyPage'),
-  weaknessPracticePage: document.getElementById('weaknessPracticePage'),
 
-  // Header & Nav
   navBrandLink: document.getElementById('navBrandLink'),
   navHome: document.getElementById('navHome'),
   navGuide: document.getElementById('navGuide'),
   navDemo: document.getElementById('navDemo'),
   navInterview: document.getElementById('navInterview'),
-  navDashboard: document.getElementById('navDashboard'),
-  navPractice: document.getElementById('navPractice'),
   navHistory: document.getElementById('navHistory'),
-  navWeakness: document.getElementById('navWeakness'),
 
-  // Hero Actions
   heroStartBtn: document.getElementById('heroStartBtn'),
   heroDemoBtn: document.getElementById('heroDemoBtn'),
   heroGuideBtn: document.getElementById('heroGuideBtn'),
@@ -99,7 +127,6 @@ const elements = {
   startFullCardBtn: document.getElementById('startFullCardBtn'),
   saveAndDashBtn: document.getElementById('saveAndDashBtn'),
 
-  // Setup Page Controls
   username: document.getElementById('username'),
   role: document.getElementById('role'),
   modeNormal: document.getElementById('modeNormal'),
@@ -111,45 +138,12 @@ const elements = {
   openAuthModalBtn: document.getElementById('openAuthModalBtn'),
   logoutBtn: document.getElementById('logoutBtn'),
 
-  // Auth Modal
-  authModal: document.getElementById('authModal'),
-  closeAuthModalBtn: document.getElementById('closeAuthModalBtn'),
-  tabLogin: document.getElementById('tabLogin'),
-  tabSignup: document.getElementById('tabSignup'),
-  groupName: document.getElementById('groupName'),
-  groupConfirmPassword: document.getElementById('groupConfirmPassword'),
-  groupRole: document.getElementById('groupRole'),
-  authName: document.getElementById('authName'),
-  authEmail: document.getElementById('authEmail'),
-  authPassword: document.getElementById('authPassword'),
-  authConfirmPassword: document.getElementById('authConfirmPassword'),
-  authRole: document.getElementById('authRole'),
-  authSubmitBtn: document.getElementById('authSubmitBtn'),
-  authErrorMsg: document.getElementById('authErrorMsg'),
-
-  // Dashboard
-  dashCandidateName: document.getElementById('dashCandidateName'),
-  statTotalSessions: document.getElementById('statTotalSessions'),
-  statAvgScore: document.getElementById('statAvgScore'),
-  weaknessAlertBanner: document.getElementById('weaknessAlertBanner'),
-  weaknessTitle: document.getElementById('weaknessTitle'),
-  weaknessDesc: document.getElementById('weaknessDesc'),
-  practiceWeaknessBtn: document.getElementById('practiceWeaknessBtn'),
-
-  // Setup Page
-  selectScenario: document.getElementById('selectScenario'),
-  toggleWebcam: document.getElementById('toggleWebcam'),
-  toggleMic: document.getElementById('toggleMic'),
-  launchPracticeBtn: document.getElementById('launchPracticeBtn'),
-
   // Practice Dashboard
   liveScenBadge: document.getElementById('liveScenBadge'),
   qCounter: document.getElementById('qCounter'),
   timer: document.getElementById('timer'),
   currentQuestion: document.getElementById('currentQuestion'),
   liveTranscript: document.getElementById('liveTranscript'),
-  sttStatus: document.getElementById('sttStatus'),
-
   liveWpmVal: document.getElementById('liveWpmVal'),
   liveFillersVal: document.getElementById('liveFillersVal'),
   liveFluencyVal: document.getElementById('liveFluencyVal'),
@@ -159,16 +153,15 @@ const elements = {
 
   valEyeContact: document.getElementById('valEyeContact'),
   valPosture: document.getElementById('valPosture'),
-  valHead: document.getElementById('valHead'),
+  valFaceExpression: document.getElementById('valFaceExpression'),
   valGesture: document.getElementById('valGesture'),
   valSpeech: document.getElementById('valSpeech'),
 
   feedbackList: document.getElementById('feedbackList'),
-  displayName: document.getElementById('displayName'),
-  displayScenario: document.getElementById('displayScenario'),
 
-  toggleRecBtn: document.getElementById('toggleRecBtn'),
-  submitTurnBtn: document.getElementById('submitTurnBtn'),
+  displayName: document.getElementById('displayName'),
+  displayRole: document.getElementById('displayRole'),
+  nextBtn: document.getElementById('nextBtn'),
   stopBtn: document.getElementById('stopBtn'),
 
   // Status Indicators
@@ -179,330 +172,463 @@ const elements = {
   statusGesture: document.getElementById('statusGesture'),
   statusSpeech: document.getElementById('statusSpeech'),
 
-  // Report Screen
+  // Report Elements
   reportName: document.getElementById('reportName'),
-  reportScenario: document.getElementById('reportScenario'),
+  reportRole: document.getElementById('reportRole'),
   reportScoreOverall: document.getElementById('reportScoreOverall'),
-  reportGrammarScore: document.getElementById('reportGrammarScore'),
-  reportVocabScore: document.getElementById('reportVocabScore'),
-  reportFluencyScore: document.getElementById('reportFluencyScore'),
+
+  reportPostureScore: document.getElementById('reportPostureScore'),
+  reportPostureStability: document.getElementById('reportPostureStability'),
+  reportEyeContact: document.getElementById('reportEyeContact'),
+  reportGestureControl: document.getElementById('reportGestureControl'),
+  reportFacialEngage: document.getElementById('reportFacialEngage'),
+
   reportWpmText: document.getElementById('reportWpmText'),
   reportFillersText: document.getElementById('reportFillersText'),
+  reportFluencyScore: document.getElementById('reportFluencyScore'),
   reportFillersListText: document.getElementById('reportFillersListText'),
-  reportEyeContact: document.getElementById('reportEyeContact'),
-  reportPostureScore: document.getElementById('reportPostureScore'),
-  reportHeadStability: document.getElementById('reportHeadStability'),
-  reportAiFeedbackText: document.getElementById('reportAiFeedbackText'),
 
+  reportGrammarScore: document.getElementById('reportGrammarScore'),
+  reportVocabScore: document.getElementById('reportVocabScore'),
+  nlpSuggestionsList: document.getElementById('nlpSuggestionsList'),
+
+  questionBreakdownTableBody: document.getElementById('questionBreakdownTableBody'),
+  questionChartCanvas: document.getElementById('questionChartCanvas'),
+  pointLossAuditList: document.getElementById('pointLossAuditList'),
+
+  reportAiFeedbackText: document.getElementById('reportAiFeedbackText'),
   strengthsList: document.getElementById('strengthsList'),
   improvementsList: document.getElementById('improvementsList'),
-  saveAndDashBtn: document.getElementById('saveAndDashBtn'),
   restartBtn: document.getElementById('restartBtn'),
 
-  // History & Progress Screen
+  // History Page
   progressTrendChartCanvas: document.getElementById('progressTrendChartCanvas'),
-  historyTableBody: document.getElementById('historyTableBody'),
-
-  // Targeted Weakness Screen
-  weaknessExTitle: document.getElementById('weaknessExTitle'),
-  weaknessExDesc: document.getElementById('weaknessExDesc'),
-  weaknessPromptText: document.getElementById('weaknessPromptText'),
-  weaknessTimerText: document.getElementById('weaknessTimerText'),
-  weaknessFillersVal: document.getElementById('weaknessFillersVal'),
-  weaknessEyeVal: document.getElementById('weaknessEyeVal'),
-  startWeaknessExBtn: document.getElementById('startWeaknessExBtn')
+  historyTableBody: document.getElementById('historyTableBody')
 };
 
-let progressTrendChartInstance = null;
-
-// ---------------- 3. API FETCH HELPER ----------------
-async function apiFetch(endpoint, method = 'GET', data = null) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (state.authToken) {
-    headers['Authorization'] = `Bearer ${state.authToken}`;
-  }
-
-  const config = { method, headers };
-  if (data) config.body = JSON.stringify(data);
-
-  const url = `${API_BASE_URL}${endpoint}`;
-  try {
-    const res = await fetch(url, config);
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      throw new Error(`Server returned non-JSON response (${res.status}). Ensure backend server is running on http://localhost:5000.`);
-    }
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'API Request failed');
-    return json;
-  } catch (err) {
-    console.warn(`API Error (${endpoint}):`, err.message);
-    throw err;
-  }
-}
-
-// ---------------- 4. SPA ROUTER & SCREEN SWITCHING ----------------
+// ---------------- 3. SCREEN SWITCHING & API HELPERS ----------------
 function showScreen(screenId) {
-  const screens = ['landingPage', 'inputPage', 'dashboardPage', 'scenarioPage', 'interviewPage', 'reportPage', 'historyPage', 'weaknessPracticePage'];
-  screens.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      if (id === screenId) {
-        el.classList.add('active');
-      } else {
-        el.classList.remove('active');
-      }
-    }
-  });
-
-  // Highlight Nav Links
-  [elements.navHome, elements.navGuide, elements.navDemo, elements.navInterview, elements.navDashboard, elements.navPractice, elements.navHistory, elements.navWeakness].forEach(btn => {
-    if (btn) btn.classList.remove('active');
-  });
-
-  if (screenId === 'landingPage' && elements.navHome) elements.navHome.classList.add('active');
-  if (screenId === 'inputPage' && elements.navInterview) elements.navInterview.classList.add('active');
-  if (screenId === 'dashboardPage' && elements.navDashboard) elements.navDashboard.classList.add('active');
-  if (screenId === 'scenarioPage' && elements.navPractice) elements.navPractice.classList.add('active');
-  if (screenId === 'historyPage' && elements.navHistory) elements.navHistory.classList.add('active');
-  if (screenId === 'weaknessPracticePage' && elements.navWeakness) elements.navWeakness.classList.add('active');
-
-  // Stop camera if navigating away from live practice
-  if (screenId !== 'interviewPage' && state.isInterviewRunning) {
-    stopCamera();
-    state.isInterviewRunning = false;
-    if (state.questionTimer) clearInterval(state.questionTimer);
+  document.querySelectorAll('main.screen').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById(screenId);
+  if (target) {
+    target.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Load screen data
-  if (screenId === 'dashboardPage') loadDashboardData();
-  if (screenId === 'historyPage') loadProgressDashboard();
-  if (screenId === 'weaknessPracticePage') setupWeaknessScreen();
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function requireAuthGuard(onSuccess) {
-  if (state.currentUser && state.authToken) {
-    onSuccess();
-  } else {
-    if (elements.authModal) {
-      elements.authModal.classList.add('active');
-      if (elements.authErrorMsg) {
-        elements.authErrorMsg.textContent = "Please Sign In or Create an Account first to access AI Practice & Quick Demo modes.";
-        elements.authErrorMsg.style.display = "block";
-      }
-    }
+  if (screenId === 'historyPage') {
+    loadProgressDashboard();
   }
-}
-
-function startQuickDemo() {
-  requireAuthGuard(() => {
-    state.isDemoMode = true;
-    state.currentScenario = 'Job Interview Practice';
-    launchPracticeSession();
-  });
-}
-
-function startFullInterview() {
-  requireAuthGuard(() => {
-    state.isDemoMode = false;
-    state.currentScenario = (elements.selectScenario && elements.selectScenario.value) ? elements.selectScenario.value : 'Job Interview';
-    launchPracticeSession();
-  });
 }
 
 function scrollToGuide() {
   showScreen('landingPage');
-  if (elements.guideSection) {
-    elements.guideSection.scrollIntoView({ behavior: 'smooth' });
-  } else {
-    const guideEl = document.getElementById('guideSection');
-    if (guideEl) guideEl.scrollIntoView({ behavior: 'smooth' });
-  }
-}
-
-// ---------------- 5. AUTHENTICATION MANAGER ----------------
-async function initAuth() {
-  if (state.authToken) {
-    try {
-      const res = await apiFetch('/api/auth/me');
-      if (res.user) {
-        state.currentUser = res.user;
-      }
-    } catch (e) {
-      console.warn("Auth endpoint verify failed, checking stored session.");
-      const savedUser = localStorage.getItem('ai_coach_user');
-      if (savedUser) {
-        try {
-          state.currentUser = JSON.parse(savedUser);
-        } catch (parseErr) {
-          state.authToken = null;
-          state.currentUser = null;
-          localStorage.removeItem('ai_coach_token');
-          localStorage.removeItem('ai_coach_user');
-        }
-      } else {
-        state.authToken = null;
-        state.currentUser = null;
-        localStorage.removeItem('ai_coach_token');
-      }
+  setTimeout(() => {
+    if (elements.guideSection) {
+      elements.guideSection.scrollIntoView({ behavior: 'smooth' });
     }
-  }
-  updateAuthUI();
+  }, 100);
 }
 
-function updateAuthUI() {
-  if (state.currentUser && state.authToken) {
-    if (elements.headerUserName) elements.headerUserName.textContent = state.currentUser.name;
-    if (elements.headerUserRole) elements.headerUserRole.textContent = state.currentUser.role || 'Software Engineer';
-    if (elements.dashCandidateName) elements.dashCandidateName.textContent = state.currentUser.name;
-    if (elements.displayName) elements.displayName.textContent = state.currentUser.name;
-    if (elements.reportName) elements.reportName.textContent = state.currentUser.name;
-    if (elements.userProfilePill) elements.userProfilePill.style.display = 'flex';
-    if (elements.openAuthModalBtn) elements.openAuthModalBtn.style.display = 'none';
-  } else {
-    if (elements.userProfilePill) elements.userProfilePill.style.display = 'none';
-    if (elements.openAuthModalBtn) elements.openAuthModalBtn.style.display = 'flex';
-  }
-}
-
-async function loginUser(email, password) {
+async function apiFetch(endpoint, method = 'GET', data = null) {
   try {
-    if (elements.authErrorMsg) elements.authErrorMsg.style.display = 'none';
-    if (!email || !password) {
-      if (elements.authErrorMsg) {
-        elements.authErrorMsg.textContent = "Please enter both email and password.";
-        elements.authErrorMsg.style.display = 'block';
-      }
-      return;
-    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (state.authToken) headers['Authorization'] = `Bearer ${state.authToken}`;
+    
+    const options = { method, headers };
+    if (data) options.body = JSON.stringify(data);
 
-    try {
-      const res = await apiFetch('/api/auth/login', 'POST', { email, password });
-      state.authToken = res.token;
-      state.currentUser = res.user;
-    } catch (apiErr) {
-      console.warn("Backend API unavailable or returned non-JSON, using local session fallback:", apiErr.message);
-      const cleanEmail = email.toLowerCase().trim();
-      const localUsers = JSON.parse(localStorage.getItem('ai_coach_local_users') || '[]');
-      const existing = localUsers.find(u => u.email === cleanEmail);
-      if (existing) {
-        state.currentUser = { id: existing.id, name: existing.name, email: existing.email, role: existing.role };
-      } else {
-        const namePart = cleanEmail.split('@')[0];
-        const name = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-        state.currentUser = { id: 'usr_' + Date.now(), name, email: cleanEmail, role: 'Software Engineer' };
-      }
-      state.authToken = 'token_local_' + Date.now();
-    }
-
-    localStorage.setItem('ai_coach_token', state.authToken);
-    localStorage.setItem('ai_coach_user', JSON.stringify(state.currentUser));
-    updateAuthUI();
-    if (elements.authModal) elements.authModal.classList.remove('active');
-    loadDashboardData();
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, options);
+    if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+    return await res.json();
   } catch (err) {
-    if (elements.authErrorMsg) {
-      elements.authErrorMsg.textContent = err.message;
-      elements.authErrorMsg.style.display = 'block';
-    }
+    console.warn(`[Client Fallback] ${endpoint}:`, err.message);
+    return fallbackStorage(endpoint, method, data);
   }
 }
 
-async function signupUser(name, email, password, confirmPassword, role) {
-  try {
-    if (elements.authErrorMsg) elements.authErrorMsg.style.display = 'none';
-    if (!name || !email || !password || !confirmPassword) {
-      if (elements.authErrorMsg) {
-        elements.authErrorMsg.textContent = "Please fill in all required registration fields.";
-        elements.authErrorMsg.style.display = 'block';
-      }
-      return;
-    }
-    if (password !== confirmPassword) {
-      if (elements.authErrorMsg) {
-        elements.authErrorMsg.textContent = "Passwords do not match. Please verify your password.";
-        elements.authErrorMsg.style.display = 'block';
-      }
-      return;
-    }
-    if (password.length < 6) {
-      if (elements.authErrorMsg) {
-        elements.authErrorMsg.textContent = "Password must be at least 6 characters long.";
-        elements.authErrorMsg.style.display = 'block';
-      }
-      return;
-    }
+function fallbackStorage(endpoint, method, data) {
+  let history = JSON.parse(localStorage.getItem('ai_coach_sessions') || '[]');
+  if (endpoint.includes('/api/sessions/save') && method === 'POST') {
+    const newSession = { id: Date.now(), createdAt: new Date().toISOString(), ...data };
+    history.unshift(newSession);
+    localStorage.setItem('ai_coach_sessions', JSON.stringify(history));
+    return { success: true, session: newSession };
+  }
+  if (endpoint.includes('/api/sessions/history')) {
+    return history;
+  }
+  if (endpoint.includes('/api/analytics/progress')) {
+    return {
+      labels: history.slice(0, 5).reverse().map((_, i) => `Session ${i + 1}`),
+      overallScore: history.slice(0, 5).reverse().map(s => s.overallScore || 80),
+      eyeContact: history.slice(0, 5).reverse().map(s => s.cvMetrics ? s.cvMetrics.eyeContactScore : 85),
+      posture: history.slice(0, 5).reverse().map(s => s.cvMetrics ? s.cvMetrics.postureScore : 88),
+      grammar: history.slice(0, 5).reverse().map(s => s.speechMetrics ? s.speechMetrics.grammarScore : 85)
+    };
+  }
+  return [];
+}
 
-    const cleanEmail = email.toLowerCase().trim();
-    try {
-      const res = await apiFetch('/api/auth/signup', 'POST', { name, email: cleanEmail, password, role });
-      state.authToken = res.token;
-      state.currentUser = res.user;
-    } catch (apiErr) {
-      console.warn("Backend API unavailable or returned non-JSON, using local registration fallback:", apiErr.message);
-      const newUser = { id: 'usr_' + Date.now(), name: name.trim(), email: cleanEmail, role: role || 'Software Engineer' };
-      state.currentUser = newUser;
-      state.authToken = 'token_local_' + Date.now();
-      
-      const localUsers = JSON.parse(localStorage.getItem('ai_coach_local_users') || '[]');
-      localUsers.push({ ...newUser, password });
-      localStorage.setItem('ai_coach_local_users', JSON.stringify(localUsers));
-    }
+// ---------------- 4. COMPUTER VISION FEATURE ENGINES ----------------
 
-    localStorage.setItem('ai_coach_token', state.authToken);
-    localStorage.setItem('ai_coach_user', JSON.stringify(state.currentUser));
-    updateAuthUI();
-    if (elements.authModal) elements.authModal.classList.remove('active');
-    loadDashboardData();
-  } catch (err) {
-    if (elements.authErrorMsg) {
-      elements.authErrorMsg.textContent = err.message;
-      elements.authErrorMsg.style.display = 'block';
+// A. MediaPipe Pose Feature Extraction
+function processPoseFeatures(landmarks) {
+  if (!landmarks || landmarks.length < 25) {
+    return { state: 'POSE NOT CLEAR', score: 50, stability: 50, reason: 'Pose landmarks missing', isGood: false, status: 'POOR' };
+  }
+
+  const nose = landmarks[0];
+  const leftEar = landmarks[7];
+  const rightEar = landmarks[8];
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
+  const leftHip = landmarks[23];
+  const rightHip = landmarks[24];
+
+  if ((leftShoulder.visibility && leftShoulder.visibility < 0.4) || 
+      (rightShoulder.visibility && rightShoulder.visibility < 0.4)) {
+    return { state: 'POSE NOT CLEAR', score: 50, stability: 50, reason: 'Shoulders not in view', isGood: false, status: 'POOR' };
+  }
+
+  // 1. Shoulder Angle
+  const shoulderDy = leftShoulder.y - rightShoulder.y;
+  const shoulderDx = leftShoulder.x - rightShoulder.x;
+  const shoulderAngle = Math.abs(Math.atan2(shoulderDy, shoulderDx) * (180 / Math.PI));
+
+  // 2. Spine / Torso Tilt Angle
+  const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2;
+  const shoulderMidY = (leftShoulder.y + rightShoulder.y) / 2;
+  const hipMidX = (leftHip.x + rightHip.x) / 2;
+  const hipMidY = (leftHip.y + rightHip.y) / 2;
+  const spineDx = shoulderMidX - hipMidX;
+  const spineDy = shoulderMidY - hipMidY;
+  const spineAngle = Math.abs(Math.atan2(spineDx, -spineDy) * (180 / Math.PI));
+
+  // 3. Forward Head / Slouching Drop
+  const earMidY = (leftEar && rightEar) ? (leftEar.y + rightEar.y) / 2 : nose.y;
+  const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x) || 0.3;
+  const headDropRatio = (shoulderMidY - earMidY) / shoulderWidth;
+
+  let state = 'Upright posture';
+  let reason = 'Stable posture alignment';
+  let score = 95;
+  let isGood = true;
+  let status = 'GOOD';
+
+  if (shoulderAngle > 9) {
+    state = 'Shoulders appear uneven';
+    reason = 'Shoulder tilt detected';
+    score = 75;
+    isGood = false;
+    status = 'NEEDS ATTENTION';
+  } else if (spineAngle > 10) {
+    state = spineDx > 0 ? 'Leaning right' : 'Leaning left';
+    reason = 'Torso leaning away from center';
+    score = 75;
+    isGood = false;
+    status = 'NEEDS ATTENTION';
+  } else if (headDropRatio < 0.35) {
+    state = 'Forward head posture';
+    reason = 'Forward head / neck strain detected';
+    score = 70;
+    isGood = false;
+    status = 'NEEDS ATTENTION';
+  } else if (headDropRatio < 0.45 && nose.y > 0.45) {
+    state = 'Slouching';
+    reason = 'Upper body slouching';
+    score = 65;
+    isGood = false;
+    status = 'POOR';
+  }
+
+  return { state, score, reason, isGood, status, shoulderAngle, spineAngle, headDropRatio };
+}
+
+// B. MediaPipe Face Mesh Facial Behavior Engine
+function processFacialBehavior(landmarks) {
+  if (!landmarks || landmarks.length < 468) {
+    return { expression: 'FACE NOT CLEAR', engagementScore: 50, status: 'POOR', mouthWidthNorm: 0 };
+  }
+
+  const forehead = landmarks[10];
+  const chin = landmarks[152];
+  const leftCheek = landmarks[234];
+  const rightCheek = landmarks[454];
+
+  const leftMouthCorner = landmarks[61];
+  const rightMouthCorner = landmarks[291];
+  const upperLip = landmarks[13];
+  const lowerLip = landmarks[14];
+
+  const faceHeight = Math.hypot(forehead.x - chin.x, forehead.y - chin.y) || 0.3;
+  const faceWidth = Math.hypot(leftCheek.x - rightCheek.x, leftCheek.y - rightCheek.y) || 0.3;
+
+  const mouthWidth = Math.hypot(leftMouthCorner.x - rightMouthCorner.x, leftMouthCorner.y - rightMouthCorner.y);
+  const mouthOpen = Math.hypot(upperLip.x - lowerLip.x, upperLip.y - lowerLip.y);
+
+  const mouthWidthNorm = mouthWidth / faceWidth;
+  const mouthOpenNorm = mouthOpen / faceHeight;
+
+  const lipCenterY = (upperLip.y + lowerLip.y) / 2;
+  const cornerAvgY = (leftMouthCorner.y + rightMouthCorner.y) / 2;
+  const cornerElevation = (lipCenterY - cornerAvgY) / faceHeight;
+
+  let expression = 'Neutral facial expression';
+  let engagementScore = 85;
+  let status = 'GOOD';
+
+  if (cornerElevation > 0.04 && mouthWidthNorm > 0.45) {
+    expression = 'Strong smile';
+    engagementScore = 98;
+  } else if (cornerElevation > 0.025) {
+    expression = 'Smile detected';
+    engagementScore = 92;
+  } else if (cornerElevation > 0.012) {
+    expression = 'Slight smile';
+    engagementScore = 88;
+  } else if (mouthOpenNorm > 0.15) {
+    expression = 'Frequent mouth opening detected';
+    engagementScore = 75;
+  } else if (cornerElevation < -0.01) {
+    expression = 'Reduced facial movement';
+    engagementScore = 65;
+    status = 'NEEDS ATTENTION';
+  }
+
+  return { expression, engagementScore, status, mouthWidthNorm, mouthOpenNorm, cornerElevation };
+}
+
+// C. MediaPipe Face Mesh Visual Attention Engine
+function processVisualAttention(landmarks) {
+  if (!landmarks || landmarks.length < 468) {
+    return { status: 'LOOKING AWAY FREQUENTLY', score: 40, isFacing: false, text: 'FACE NOT CLEAR' };
+  }
+
+  const noseTip = landmarks[1];
+  const leftEye = landmarks[33];
+  const rightEye = landmarks[263];
+  const leftCheek = landmarks[234];
+  const rightCheek = landmarks[454];
+
+  const distLeft = Math.hypot(noseTip.x - leftCheek.x, noseTip.y - leftCheek.y);
+  const distRight = Math.hypot(noseTip.x - rightCheek.x, noseTip.y - rightCheek.y);
+  const yawRatio = distLeft / (distRight || 0.001);
+
+  const eyeDx = rightEye.x - leftEye.x;
+  const eyeDy = rightEye.y - leftEye.y;
+  const rollAngle = Math.abs(Math.atan2(eyeDy, eyeDx) * (180 / Math.PI));
+
+  let isFacing = true;
+  let text = 'Facing camera';
+  let score = 95;
+
+  if (yawRatio < 0.55) {
+    isFacing = false;
+    text = 'Head turned right';
+    score = 55;
+  } else if (yawRatio > 1.8) {
+    isFacing = false;
+    text = 'Head turned left';
+    score = 55;
+  } else if (rollAngle > 12) {
+    isFacing = false;
+    text = 'Head tilted';
+    score = 70;
+  } else if (yawRatio < 0.75 || yawRatio > 1.35) {
+    isFacing = true;
+    text = 'Slightly looking away';
+    score = 80;
+  }
+
+  const status = isFacing ? 'FACING CAMERA' : 'LOOKING AWAY FREQUENTLY';
+  return { status, score, isFacing, text, yawRatio, rollAngle };
+}
+
+// D. MediaPipe Hands & Gesture Engine
+function processHandGestures(multiHandLandmarks) {
+  if (!multiHandLandmarks || multiHandLandmarks.length === 0) {
+    return { state: 'NO HAND DETECTED', gestureControlScore: 85, movementState: 'Minimal', reason: 'No hands in view' };
+  }
+
+  let handStates = [];
+  multiHandLandmarks.forEach((handLandmarks) => {
+    const wrist = handLandmarks[0];
+
+    const isIndexExt = Math.hypot(handLandmarks[8].x - wrist.x, handLandmarks[8].y - wrist.y) > 
+                       Math.hypot(handLandmarks[6].x - wrist.x, handLandmarks[6].y - wrist.y) * 1.12;
+    const isMiddleExt = Math.hypot(handLandmarks[12].x - wrist.x, handLandmarks[12].y - wrist.y) > 
+                        Math.hypot(handLandmarks[10].x - wrist.x, handLandmarks[10].y - wrist.y) * 1.12;
+    const isRingExt = Math.hypot(handLandmarks[16].x - wrist.x, handLandmarks[16].y - wrist.y) > 
+                      Math.hypot(handLandmarks[14].x - wrist.x, handLandmarks[14].y - wrist.y) * 1.12;
+    const isPinkyExt = Math.hypot(handLandmarks[20].x - wrist.x, handLandmarks[20].y - wrist.y) > 
+                       Math.hypot(handLandmarks[18].x - wrist.x, handLandmarks[18].y - wrist.y) * 1.12;
+    const isThumbExt = Math.hypot(handLandmarks[4].x - wrist.x, handLandmarks[4].y - wrist.y) > 
+                       Math.hypot(handLandmarks[2].x - wrist.x, handLandmarks[2].y - wrist.y) * 1.08;
+
+    let extCount = (isIndexExt ? 1 : 0) + (isMiddleExt ? 1 : 0) + (isRingExt ? 1 : 0) + (isPinkyExt ? 1 : 0) + (isThumbExt ? 1 : 0);
+
+    if (extCount >= 4) handStates.push('Open palm');
+    else if (extCount === 0) handStates.push('Fist');
+    else if (isIndexExt && extCount === 1) handStates.push('Pointing');
+    else if (isIndexExt && isMiddleExt && extCount === 2) handStates.push('Peace');
+    else if (isThumbExt && extCount === 1) handStates.push('Thumbs up');
+    else handStates.push('Neutral gesture');
+  });
+
+  const state = handStates[0] || 'Neutral gesture';
+  let gestureControlScore = 92;
+  let movementState = 'Moderate';
+  let reason = 'Natural communicative gestures';
+
+  return { state, gestureControlScore, movementState, reason };
+}
+
+// ---------------- 5. TEMPORAL SMOOTHING PIPELINE ----------------
+function updateTemporalSmoothing(rawPose, rawFace, rawAttention, rawGesture) {
+  // Push raw detections into circular 15-frame buffers
+  const pushBuf = (key, item) => {
+    state.buffers[key].push(item);
+    if (state.buffers[key].length > 15) state.buffers[key].shift();
+  };
+
+  pushBuf('posture', rawPose);
+  pushBuf('facial', rawFace);
+  pushBuf('attention', rawAttention);
+  pushBuf('gesture', rawGesture);
+
+  // 1. Smoothed Posture State (Majority Voting + Stability Math)
+  const poseBuf = state.buffers.posture;
+  const avgPoseScore = Math.round(poseBuf.reduce((a, b) => a + b.score, 0) / poseBuf.length);
+
+  // Posture Stability calculation (100 minus angle variance over 15 frames)
+  let angleVar = 0;
+  if (poseBuf.length > 1) {
+    const meanAngle = poseBuf.reduce((a, b) => a + (b.shoulderAngle || 0), 0) / poseBuf.length;
+    angleVar = poseBuf.reduce((a, b) => a + Math.pow((b.shoulderAngle || 0) - meanAngle, 2), 0) / poseBuf.length;
+  }
+  const postureStability = Math.max(60, Math.min(100, Math.round(100 - angleVar * 4)));
+
+  // Majority vote for posture state string
+  const postureCounts = {};
+  poseBuf.forEach(p => postureCounts[p.state] = (postureCounts[p.state] || 0) + 1);
+  const smoothedPostureState = Object.keys(postureCounts).reduce((a, b) => postureCounts[a] > postureCounts[b] ? a : b);
+
+  // 2. Smoothed Visual Attention
+  const attBuf = state.buffers.attention;
+  const facingCount = attBuf.filter(a => a.isFacing).length;
+  const attentionScore = Math.round((facingCount / attBuf.length) * 100);
+  const attentionStatus = attentionScore >= 75 ? 'FACING CAMERA' : 'LOOKING AWAY FREQUENTLY';
+  const latestAttText = attBuf[attBuf.length - 1] ? attBuf[attBuf.length - 1].text : 'Facing camera';
+
+  // 3. Smoothed Facial Engagement
+  const faceBuf = state.buffers.facial;
+  const avgFacialScore = Math.round(faceBuf.reduce((a, b) => a + b.engagementScore, 0) / faceBuf.length);
+  const faceCounts = {};
+  faceBuf.forEach(f => faceCounts[f.expression] = (faceCounts[f.expression] || 0) + 1);
+  const smoothedExpression = Object.keys(faceCounts).reduce((a, b) => faceCounts[a] > faceCounts[b] ? a : b);
+
+  // 4. Smoothed Gesture Control
+  const gestBuf = state.buffers.gesture;
+  const avgGestureScore = Math.round(gestBuf.reduce((a, b) => a + b.gestureControlScore, 0) / gestBuf.length);
+  const gestCounts = {};
+  gestBuf.forEach(g => gestCounts[g.state] = (gestCounts[g.state] || 0) + 1);
+  const smoothedGestureState = Object.keys(gestCounts).reduce((a, b) => gestCounts[a] > gestCounts[b] ? a : b);
+
+  // Calculate Weighted Non-Verbal Presence Score
+  // Formula: Posture 25% + Stability 15% + Attention 20% + Gesture 20% + Facial 20%
+  const overallNonVerbal = Math.round(
+    (avgPoseScore * 0.25) +
+    (postureStability * 0.15) +
+    (attentionScore * 0.20) +
+    (avgGestureScore * 0.20) +
+    (avgFacialScore * 0.20)
+  );
+
+  state.metrics = {
+    postureState: smoothedPostureState,
+    postureScore: avgPoseScore,
+    postureStability,
+    postureReason: rawPose.reason,
+    postureStatus: rawPose.status,
+
+    attentionStatus,
+    attentionScore,
+    attentionText: latestAttText,
+
+    facialExpression: smoothedExpression,
+    facialEngagementScore: avgFacialScore,
+    facialStatus: rawFace.status,
+
+    gestureState: smoothedGestureState,
+    gestureControlScore: avgGestureScore,
+    gestureMovement: rawGesture.movementState,
+    gestureReason: rawGesture.reason,
+
+    overallNonVerbal
+  };
+
+  // Persistent Point-Loss Audit Tracker
+  trackPointLossAudit(smoothedPostureState, attentionStatus, smoothedExpression);
+}
+
+// Point-Loss Audit System Logic
+function trackPointLossAudit(postureState, attentionStatus, expression) {
+  if (postureState === 'Slouching' || postureState === 'Forward head posture') {
+    state.auditCounter.slouch++;
+    if (state.auditCounter.slouch === 45) { // ~3 seconds persistent
+      state.pointLossAudit.push('Forward head / slouching posture detected repeatedly.');
     }
+  } else {
+    state.auditCounter.slouch = 0;
+  }
+
+  if (attentionStatus === 'LOOKING AWAY FREQUENTLY') {
+    state.auditCounter.lookAway++;
+    if (state.auditCounter.lookAway === 45) {
+      state.pointLossAudit.push('Frequent gaze deviation away from camera lens.');
+    }
+  } else {
+    state.auditCounter.lookAway = 0;
   }
 }
 
-function logoutUser() {
-  state.authToken = null;
-  state.currentUser = null;
-  localStorage.removeItem('ai_coach_token');
-  localStorage.removeItem('ai_coach_user');
-  updateAuthUI();
-  showScreen('landingPage');
+// ---------------- 6. BASIC RULE-BASED NLP ANALYSIS ----------------
+function analyzeBasicNLP(transcript) {
+  if (!transcript || transcript.trim().length === 0) {
+    return { grammarScore: 90, suggestions: ['Speak clearly to receive basic NLP language analysis.'] };
+  }
+
+  const text = transcript.toLowerCase();
+  const suggestions = [];
+
+  const rules = [
+    { pattern: /\binterested for\b/g, replace: 'interested in', msg: 'Change "interested for" to "interested in"' },
+    { pattern: /\bwant to improving\b/g, replace: 'want to improve', msg: 'Change "want to improving" to "want to improve"' },
+    { pattern: /\bdiscuss about\b/g, replace: 'discuss', msg: 'Say "discuss" instead of "discuss about"' },
+    { pattern: /\bmore better\b/g, replace: 'better', msg: 'Say "better" instead of "more better"' },
+    { pattern: /\bgood in\b/g, replace: 'good at', msg: 'Change "good in" to "good at"' },
+    { pattern: /\blooking for work in\b/g, replace: 'looking to work in', msg: 'Consider "looking to work in"' }
+  ];
+
+  let deductions = 0;
+  rules.forEach(rule => {
+    if (rule.pattern.test(text)) {
+      suggestions.push(rule.msg);
+      deductions += 6;
+    }
+  });
+
+  const grammarScore = Math.max(65, 100 - deductions);
+  if (suggestions.length === 0) {
+    suggestions.push('No significant grammar or preposition issues detected.');
+  }
+
+  return { grammarScore, suggestions };
 }
 
-// ---------------- 6. DASHBOARD & WEAKNESS ENGINE ----------------
-async function loadDashboardData() {
-  try {
-    const history = await apiFetch('/api/sessions/history');
-    elements.statTotalSessions.textContent = history.length;
-    if (history.length > 0) {
-      const avg = Math.round(history.reduce((a, s) => a + (s.overallScore || 80), 0) / history.length);
-      elements.statAvgScore.textContent = `${avg}%`;
-    } else {
-      elements.statAvgScore.textContent = `82%`;
-    }
-  } catch (e) {}
-
-  // Fetch Recurring Weaknesses
-  try {
-    const weakness = await apiFetch('/api/analytics/weakness');
-    state.currentWeakness = weakness;
-    if (weakness && weakness.hasWeakness) {
-      elements.weaknessAlertBanner.style.display = 'flex';
-      elements.weaknessTitle.textContent = weakness.title;
-      elements.weaknessDesc.textContent = weakness.description;
-    } else {
-      elements.weaknessAlertBanner.style.display = 'none';
-    }
-  } catch (e) {}
-}
-
-// ---------------- 7. MODEL LOADERS & SPEECH STT ----------------
+// ---------------- 7. MODEL INITIALIZATION & SPEECH STT ----------------
 async function initModels() {
-  // A. Teachable Machine Gesture Model
+  // A. Teachable Machine Model
   try {
     updateStatus(elements.statusGesture, 'loading');
     if (window.tmImage) {
@@ -554,7 +680,7 @@ async function initModels() {
     updateStatus(elements.statusFace, 'error', 'Face');
   }
 
-  // E. Web Speech API STT
+  // E. Web Speech STT
   initSpeechAnalysis();
 }
 
@@ -562,7 +688,7 @@ function initSpeechAnalysis() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     state.speech.isAvailable = false;
-    updateStatus(elements.statusSpeech, 'error', 'Speech: Unsupported');
+    updateStatus(elements.statusSpeech, 'error', 'Speech Unsupported');
     return;
   }
 
@@ -585,7 +711,7 @@ function initSpeechAnalysis() {
       if (turnTranscript) {
         state.speech.transcript += turnTranscript;
         state.speech.currentTurnTranscript += turnTranscript;
-        elements.liveTranscript.textContent = state.speech.currentTurnTranscript;
+        if (elements.liveTranscript) elements.liveTranscript.textContent = state.speech.currentTurnTranscript;
 
         const words = turnTranscript.trim().split(/\s+/);
         state.speech.wordCount += words.length;
@@ -599,14 +725,13 @@ function initSpeechAnalysis() {
           }
         });
 
-        // WPM Calculation
         const durationMins = (Date.now() - state.speech.speechStartTime) / 60000;
         if (durationMins > 0.05) {
           state.speech.wpm = Math.round(state.speech.wordCount / durationMins);
         }
 
-        elements.liveWpmVal.textContent = `${state.speech.wpm} WPM`;
-        elements.liveFillersVal.textContent = state.speech.fillerCount;
+        if (elements.liveWpmVal) elements.liveWpmVal.textContent = `${state.speech.wpm} WPM`;
+        if (elements.liveFillersVal) elements.liveFillersVal.textContent = state.speech.fillerCount;
       }
     };
 
@@ -614,10 +739,10 @@ function initSpeechAnalysis() {
 
     state.speechRecognition = recognition;
     state.speech.isAvailable = true;
-    updateStatus(elements.statusSpeech, 'ready', 'Speech: Active');
+    updateStatus(elements.statusSpeech, 'ready', 'Speech Active');
   } catch (e) {
     state.speech.isAvailable = false;
-    updateStatus(elements.statusSpeech, 'error', 'Speech: Error');
+    updateStatus(elements.statusSpeech, 'error', 'Speech Error');
   }
 }
 
@@ -631,9 +756,9 @@ function updateStatus(el, status, text) {
   }
 }
 
-// ---------------- 8. SINGLE WEBCAM & MEDIAPIPE FRAME LOOP ----------------
+// ---------------- 8. WEBCAM & REAL-TIME FRAME LOOP ----------------
 async function initCamera() {
-  updateStatus(elements.statusCamera, 'loading', 'Camera');
+  updateStatus(elements.statusCamera, 'loading', 'Camera Loading');
   try {
     state.webcamStream = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480, frameRate: { ideal: 30 } },
@@ -648,7 +773,7 @@ async function initCamera() {
       };
     });
 
-    updateStatus(elements.statusCamera, 'ready', 'Camera');
+    updateStatus(elements.statusCamera, 'ready', 'Camera Active');
     startFrameLoop();
   } catch (err) {
     updateStatus(elements.statusCamera, 'error', 'Camera Error');
@@ -686,269 +811,378 @@ function startFrameLoop() {
     if (state.hands) await state.hands.send({ image: elements.webcam });
     if (state.faceMesh) await state.faceMesh.send({ image: elements.webcam });
 
-    analyzeVisionAndIndicators(ctx);
+    // 1. Process Feature Extraction
+    const rawPose = processPoseFeatures(state.latestPoseLandmarks);
+    const rawFace = processFacialBehavior(state.latestFaceLandmarks);
+    const rawAtt = processVisualAttention(state.latestFaceLandmarks);
+    const rawGest = processHandGestures(state.latestHandLandmarks);
+
+    // 2. Temporal Smoothing & Stability
+    updateTemporalSmoothing(rawPose, rawFace, rawAtt, rawGest);
+
+    // 3. Render Live UI Metrics & Canvas Overlay
+    updateLiveUIElements();
+    drawOverlaySkeleton(ctx);
+
     state.animFrameId = requestAnimationFrame(processFrame);
   }
 
   state.animFrameId = requestAnimationFrame(processFrame);
 }
 
-// Computer Vision Indicators Calculation (Eye Contact, Posture, Head Stability)
-function analyzeVisionAndIndicators(ctx) {
-  ctx.clearRect(0, 0, elements.overlay.width, elements.overlay.height);
-  state.accumulated.totalFrames++;
+function updateLiveUIElements() {
+  const m = state.metrics;
 
-  // 1. Eye Contact Estimation (MediaPipe Face Mesh)
-  if (state.latestFaceLandmarks) {
-    const noseTip = state.latestFaceLandmarks[1];
-    const leftEye = state.latestFaceLandmarks[33];
-    const rightEye = state.latestFaceLandmarks[263];
-
-    const eyeDx = Math.abs(leftEye.x - rightEye.x);
-    const eyeCenter = (leftEye.x + rightEye.x) / 2;
-    const offset = Math.abs(noseTip.x - eyeCenter);
-
-    if (offset < 0.055 && noseTip.y > 0.35 && noseTip.y < 0.65) {
-      state.indicators.eyeContact = 'good';
-      state.accumulated.eyeContactGoodFrames++;
-      elements.valEyeContact.innerHTML = `<span style="color:var(--success)">🟢 EYE CONTACT</span>`;
-    } else {
-      state.indicators.eyeContact = 'warning';
-      elements.valEyeContact.innerHTML = `<span style="color:var(--warning)">🟡 LOOKING AWAY</span>`;
-    }
-  } else {
-    elements.valEyeContact.innerHTML = `<span style="color:var(--text-muted)">SEARCHING...</span>`;
+  if (elements.valPosture) {
+    const color = m.postureStatus === 'GOOD' ? 'var(--success)' : 'var(--warning)';
+    elements.valPosture.innerHTML = `<span style="color:${color}">${m.postureState} (Stability: ${m.postureStability}%)</span>`;
   }
 
-  // 2. Posture Alignment Estimation (MediaPipe Pose)
-  if (state.latestPoseLandmarks) {
-    const leftShoulder = state.latestPoseLandmarks[11];
-    const rightShoulder = state.latestPoseLandmarks[12];
-    const nose = state.latestPoseLandmarks[0];
-
-    const shoulderSlope = Math.abs(leftShoulder.y - rightShoulder.y);
-    const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
-
-    if (shoulderSlope < 0.06 && shoulderWidth > 0.25 && nose.y < 0.5) {
-      state.indicators.posture = 'good';
-      state.accumulated.postureGoodFrames++;
-      elements.valPosture.innerHTML = `<span style="color:var(--success)">🟢 GOOD POSTURE</span>`;
-    } else {
-      state.indicators.posture = 'warning';
-      elements.valPosture.innerHTML = `<span style="color:var(--warning)">🟡 SLOUCHING / TILT</span>`;
-    }
-  } else {
-    elements.valPosture.innerHTML = `<span style="color:var(--success)">🟢 GOOD POSTURE</span>`;
+  if (elements.valEyeContact) {
+    const color = m.attentionStatus === 'FACING CAMERA' ? 'var(--success)' : 'var(--warning)';
+    elements.valEyeContact.innerHTML = `<span style="color:${color}">${m.attentionStatus} (${m.attentionScore}%)</span>`;
   }
 
-  // 3. Head Stability & Hand Movement
-  if (state.latestFaceLandmarks) {
-    state.accumulated.headStableFrames++;
-    elements.valHead.innerHTML = `<span style="color:var(--success)">🟢 HEAD STABLE</span>`;
+  if (elements.valFaceExpression) {
+    elements.valFaceExpression.innerHTML = `<span style="color:var(--primary)">${m.facialExpression} (Engage: ${m.facialEngagementScore}%)</span>`;
   }
 
-  if (state.latestHandLandmarks && state.latestHandLandmarks.length > 0) {
-    elements.valGesture.innerHTML = `<span style="color:var(--primary)">HAND GESTURING</span>`;
-  } else {
-    elements.valGesture.innerHTML = `<span style="color:var(--text-muted)">RESTING HANDS</span>`;
+  if (elements.valGesture) {
+    elements.valGesture.innerHTML = `<span style="color:var(--accent)">${m.gestureState} (${m.gestureMovement})</span>`;
   }
 }
 
-// ---------------- 9. SCENARIO PRACTICE EXECUTION ----------------
+// Draw Skeleton & Landmarks on Live Canvas
+function drawOverlaySkeleton(ctx) {
+  const w = elements.overlay.width;
+  const h = elements.overlay.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // A. Pose Skeleton
+  if (state.latestPoseLandmarks) {
+    const lm = state.latestPoseLandmarks;
+    const drawLine = (i1, i2, color = '#38bdf8', width = 3) => {
+      if (lm[i1] && lm[i2] && lm[i1].visibility > 0.4 && lm[i2].visibility > 0.4) {
+        ctx.beginPath();
+        ctx.moveTo(lm[i1].x * w, lm[i1].y * h);
+        ctx.lineTo(lm[i2].x * w, lm[i2].y * h);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.stroke();
+      }
+    };
+
+    // Shoulder line
+    drawLine(11, 12, '#38bdf8', 4);
+    // Spine
+    const sMidX = (lm[11].x + lm[12].x) / 2 * w;
+    const sMidY = (lm[11].y + lm[12].y) / 2 * h;
+    const hMidX = (lm[23].x + lm[24].x) / 2 * w;
+    const hMidY = (lm[23].y + lm[24].y) / 2 * h;
+
+    ctx.beginPath();
+    ctx.moveTo(sMidX, sMidY);
+    ctx.lineTo(hMidX, hMidY);
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  // B. Face Mesh Subset (Eyes, Mouth, Oval)
+  if (state.latestFaceLandmarks) {
+    const lm = state.latestFaceLandmarks;
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+    [10, 152, 234, 454, 61, 291, 33, 263].forEach(idx => {
+      if (lm[idx]) {
+        ctx.beginPath();
+        ctx.arc(lm[idx].x * w, lm[idx].y * h, 2.5, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    });
+  }
+
+  // C. Hands Joints
+  if (state.latestHandLandmarks && state.latestHandLandmarks.length > 0) {
+    ctx.fillStyle = '#c084fc';
+    state.latestHandLandmarks.forEach(hand => {
+      hand.forEach(pt => {
+        ctx.beginPath();
+        ctx.arc(pt.x * w, pt.y * h, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    });
+  }
+}
+
+// ---------------- 9. PRACTICE SESSION & INTERVIEW FLOW ----------------
+function startQuickDemo() {
+  state.isDemoMode = true;
+  state.currentScenario = 'Quick Demo (1 Question)';
+  elements.username.value = 'Demo Candidate';
+  launchPracticeSession();
+}
+
+function startFullInterview() {
+  state.isDemoMode = false;
+  state.currentScenario = 'Job Interview';
+  showScreen('inputPage');
+}
+
 async function launchPracticeSession() {
-  state.currentScenario = (elements.selectScenario && elements.selectScenario.value) ? elements.selectScenario.value : (state.currentScenario || 'Job Interview');
-  state.currentQuestionIndex = 0;
-  state.remainingTime = state.isDemoMode ? 25 : 90;
+  const nameInput = elements.username ? elements.username.value.trim() : '';
+  const roleInput = elements.role ? elements.role.value : 'Software Engineer';
+
+  state.currentUser = {
+    name: nameInput || 'Fresher Candidate',
+    role: roleInput
+  };
+
+  if (elements.displayName) elements.displayName.textContent = state.currentUser.name;
+  if (elements.displayRole) elements.displayRole.textContent = state.currentUser.role;
+  if (elements.headerUserName) elements.headerUserName.textContent = state.currentUser.name;
+  if (elements.headerUserRole) elements.headerUserRole.textContent = state.currentUser.role;
+
   state.isInterviewRunning = true;
+  state.currentQuestionIndex = 0;
   state.conversationTurns = [];
-  state.speech.transcript = '';
-  state.speech.currentTurnTranscript = '';
-  state.speech.fillerCount = 0;
-  state.speech.wordCount = 0;
-  state.speech.fillerWordsDetected = {};
+  state.questionSnapshots = [];
+  state.pointLossAudit = [];
 
   showScreen('interviewPage');
+  await initCamera();
 
-  const modeBadge = state.isDemoMode ? '1-QUESTION QUICK DEMO' : 'AI PRACTICE INTERVIEW';
-  if (elements.liveScenBadge) elements.liveScenBadge.textContent = `${state.currentScenario.toUpperCase()} • ${modeBadge}`;
-  if (elements.displayName) elements.displayName.textContent = state.currentUser.name;
-  if (elements.displayScenario) elements.displayScenario.textContent = `${state.currentScenario} (${state.isDemoMode ? 'Demo' : 'Full Practice'})`;
+  state.speech.speechStartTime = Date.now();
+  state.speech.wordCount = 0;
+  state.speech.fillerCount = 0;
+  state.speech.fillerWordsDetected = {};
+  state.speech.transcript = '';
 
-  // Start Speech STT
-  if (state.speechRecognition && (!elements.toggleMic || elements.toggleMic.checked)) {
-    try {
-      state.speech.speechStartTime = Date.now();
-      state.speechRecognition.start();
-    } catch (e) {}
+  if (state.speechRecognition && state.speech.isAvailable) {
+    try { state.speechRecognition.start(); } catch (e) {}
   }
 
-  if (!elements.toggleWebcam || elements.toggleWebcam.checked) {
-    initCamera();
-  }
-
-  // Fetch First Question from Backend Scenario AI
   fetchNextAiQuestion();
 }
 
-async function fetchNextAiQuestion() {
-  if (elements.currentQuestion) elements.currentQuestion.textContent = "AI Conversational Partner is thinking...";
-  state.speech.currentTurnTranscript = '';
-  if (elements.liveTranscript) elements.liveTranscript.textContent = "Listening to your answer...";
-
-  const maxQ = state.isDemoMode ? 1 : 5;
-  try {
-    const res = await apiFetch('/api/chat/respond', 'POST', {
-      scenario: state.currentScenario,
-      questionIndex: state.currentQuestionIndex,
-      userAnswerText: state.speech.currentTurnTranscript
-    });
-
-    if (elements.currentQuestion) elements.currentQuestion.textContent = res.reply;
-    if (elements.qCounter) elements.qCounter.textContent = `${state.isDemoMode ? 'DEMO TURN' : 'QUESTION'} ${state.currentQuestionIndex + 1} OF ${maxQ}`;
-    state.conversationTurns.push({ questionText: res.reply, userAnswerText: '' });
-  } catch (e) {
-    const fallbackQ = state.isDemoMode ? "Tell me about yourself and why you're interested in this role?" : `Can you describe your background and relevant experience for ${state.currentScenario}?`;
-    if (elements.currentQuestion) elements.currentQuestion.textContent = fallbackQ;
-    if (elements.qCounter) elements.qCounter.textContent = `${state.isDemoMode ? 'DEMO TURN' : 'QUESTION'} ${state.currentQuestionIndex + 1} OF ${maxQ}`;
-    state.conversationTurns.push({ questionText: fallbackQ, userAnswerText: '' });
+function fetchNextAiQuestion() {
+  if (state.isDemoMode && state.currentQuestionIndex >= 1) {
+    finishPracticeSession();
+    return;
+  }
+  if (!state.isDemoMode && state.currentQuestionIndex >= state.interviewQuestions.length) {
+    finishPracticeSession();
+    return;
   }
 
-  // Restart Question Timer
+  state.speech.currentTurnTranscript = '';
+  if (elements.liveTranscript) elements.liveTranscript.textContent = 'Listening... Start speaking into your microphone.';
+
+  const qText = state.interviewQuestions[state.currentQuestionIndex];
+  elements.currentQuestion.textContent = qText;
+  elements.qCounter.textContent = `QUESTION ${state.currentQuestionIndex + 1} OF ${state.isDemoMode ? 1 : state.interviewQuestions.length}`;
+
   state.remainingTime = state.isDemoMode ? 25 : 90;
-  if (elements.timer) elements.timer.textContent = formatTime(state.remainingTime);
+  elements.timer.textContent = formatTime(state.remainingTime);
+
   if (state.questionTimer) clearInterval(state.questionTimer);
   state.questionTimer = setInterval(() => {
     state.remainingTime--;
-    if (elements.timer) elements.timer.textContent = formatTime(state.remainingTime);
+    elements.timer.textContent = formatTime(state.remainingTime);
     if (state.remainingTime <= 0) {
+      clearInterval(state.questionTimer);
       submitTurnAnswer();
     }
   }, 1000);
 }
 
 function submitTurnAnswer() {
-  if (state.conversationTurns.length > 0) {
-    state.conversationTurns[state.conversationTurns.length - 1].userAnswerText = state.speech.currentTurnTranscript;
-  }
+  if (state.questionTimer) clearInterval(state.questionTimer);
 
-  appendFeedbackCard(`Answer recorded for ${state.isDemoMode ? 'Demo Turn 1' : 'Question ' + (state.currentQuestionIndex + 1)}.`, 'good');
+  const nlpRes = analyzeBasicNLP(state.speech.currentTurnTranscript);
 
-  const maxQ = state.isDemoMode ? 1 : 5;
-  if (state.currentQuestionIndex + 1 < maxQ) {
-    state.currentQuestionIndex++;
-    fetchNextAiQuestion();
-  } else {
-    finishPracticeSession();
-  }
+  // Snapshot metrics for this question turn
+  const snapshot = {
+    questionIndex: state.currentQuestionIndex + 1,
+    questionText: state.interviewQuestions[state.currentQuestionIndex],
+    postureScore: state.metrics.postureScore,
+    postureStability: state.metrics.postureStability,
+    attentionScore: state.metrics.attentionScore,
+    facialEngagementScore: state.metrics.facialEngagementScore,
+    gestureControlScore: state.metrics.gestureControlScore,
+    verbalScore: nlpRes.grammarScore
+  };
+  state.questionSnapshots.push(snapshot);
+
+  state.conversationTurns.push({
+    questionText: state.interviewQuestions[state.currentQuestionIndex],
+    userAnswerText: state.speech.currentTurnTranscript || "Answer recorded via audio stream."
+  });
+
+  state.currentQuestionIndex++;
+  fetchNextAiQuestion();
 }
 
 function finishPracticeSession() {
-  state.isInterviewRunning = false;
   if (state.questionTimer) clearInterval(state.questionTimer);
+  state.isInterviewRunning = false;
   stopCamera();
-
   generateUnifiedReport();
+  showScreen('reportPage');
 }
 
-// ---------------- 10. UNIFIED COMMUNICATION REPORT GENERATOR ----------------
+// ---------------- 10. UNIFIED REPORT GENERATION & VISUALIZATION ----------------
 async function generateUnifiedReport() {
-  showScreen('reportPage');
+  const m = state.metrics;
+  const speech = state.speech;
 
-  elements.reportScenario.textContent = state.currentScenario;
   elements.reportName.textContent = state.currentUser.name;
+  elements.reportRole.textContent = state.currentUser.role;
 
-  const totalFrames = Math.max(state.accumulated.totalFrames, 1);
-  const eyePct = Math.min(100, Math.round((state.accumulated.eyeContactGoodFrames / totalFrames) * 100) || 82);
-  const posturePct = Math.min(100, Math.round((state.accumulated.postureGoodFrames / totalFrames) * 100) || 88);
-  const headPct = Math.min(100, Math.round((state.accumulated.headStableFrames / totalFrames) * 100) || 78);
+  // Calculate Non-Verbal Presence Score (60%)
+  const nonVerbalScore = m.overallNonVerbal;
 
-  const wpm = state.speech.wpm || 138;
-  const fillers = state.speech.fillerCount || 3;
+  // Calculate Verbal Delivery Score (40%)
+  const nlpRes = analyzeBasicNLP(speech.transcript);
+  const wpmScore = (speech.wpm >= 110 && speech.wpm <= 160) ? 95 : 75;
+  const fillerScore = Math.max(60, 100 - (speech.fillerCount * 5));
+  const verbalScore = Math.round((nlpRes.grammarScore * 0.4) + (wpmScore * 0.3) + (fillerScore * 0.3));
 
-  // NLP Heuristic Metrics
-  const grammarScore = Math.max(65, Math.min(98, 90 - (fillers * 2)));
-  const vocabScore = Math.max(60, Math.min(95, 75 + Math.round(state.speech.wordCount / 10)));
-  const fluencyScore = Math.max(60, Math.min(96, 85 - (fillers * 3)));
-
-  const languageAvg = Math.round((grammarScore + vocabScore + fluencyScore) / 3);
-  const speechAvg = Math.max(60, Math.min(95, 90 - (fillers * 3)));
-  const nonVerbalAvg = Math.round((eyePct + posturePct + headPct) / 3);
-
-  const overallScore = Math.round((languageAvg * 0.35) + (speechAvg * 0.35) + (nonVerbalAvg * 0.30));
-
-  elements.reportGrammarScore.textContent = `${grammarScore}%`;
-  elements.reportVocabScore.textContent = `${vocabScore}%`;
-  elements.reportFluencyScore.textContent = `${fluencyScore}%`;
-
-  elements.reportWpmText.textContent = `${wpm} WPM`;
-  elements.reportFillersText.textContent = `${fillers}`;
-  const fillersListStr = Object.entries(state.speech.fillerWordsDetected)
-    .map(([k, v]) => `${k} (${v})`).join(', ') || 'um (2), uh (1)';
-  elements.reportFillersListText.textContent = fillersListStr;
-
-  elements.reportEyeContact.textContent = `${eyePct}%`;
-  elements.reportPostureScore.textContent = `${posturePct}%`;
-  elements.reportHeadStability.textContent = `${headPct}%`;
+  // Overall Communication Presence Score = 60% Non-Verbal + 40% Verbal
+  const overallScore = Math.round((nonVerbalScore * 0.60) + (verbalScore * 0.40));
 
   elements.reportScoreOverall.textContent = `${overallScore} / 100`;
 
-  // Dynamic AI Contextual Feedback
-  let feedback = `Your communication presence was solid during the ${state.currentScenario} session. `;
-  if (fillers > 3) {
-    feedback += `You used ${fillers} filler words (${fillersListStr}) while formulating responses. Try pausing silently for 1 second instead. `;
-  } else {
-    feedback += `Your speech flow was clean with minimal filler words. `;
-  }
-  if (eyePct >= 80) {
-    feedback += `Your camera eye contact was strong (${eyePct}%). `;
-  } else {
-    feedback += `Maintain your gaze closer to the webcam lens (${eyePct}% recorded). `;
-  }
-  feedback += `Overall spinal posture remained upright (${posturePct}%).`;
+  // Populate Non-Verbal Presence Card
+  elements.reportPostureScore.textContent = `${m.postureScore} / 100`;
+  elements.reportPostureStability.textContent = `${m.postureStability}%`;
+  elements.reportEyeContact.textContent = `${m.attentionScore}%`;
+  elements.reportGestureControl.textContent = `${m.gestureControlScore}%`;
+  elements.reportFacialEngage.textContent = `${m.facialEngagementScore}%`;
 
-  elements.reportAiFeedbackText.textContent = feedback;
+  // Populate Verbal Delivery Card
+  elements.reportWpmText.textContent = `${speech.wpm} WPM`;
+  elements.reportFillersText.textContent = speech.fillerCount;
+  elements.reportFluencyScore.textContent = `${wpmScore}%`;
 
-  // Strengths & Improvements List
+  const fillersBreakdown = Object.entries(speech.fillerWordsDetected).map(([k, v]) => `${k} (${v})`).join(', ') || 'None';
+  elements.reportFillersListText.textContent = fillersBreakdown;
+
+  // Populate Basic NLP Card
+  elements.reportGrammarScore.textContent = `${nlpRes.grammarScore}%`;
+  elements.nlpSuggestionsList.innerHTML = '';
+  nlpRes.suggestions.forEach(s => addLi(elements.nlpSuggestionsList, s));
+
+  // Render Question Breakdown Table
+  renderQuestionBreakdownTable(state.questionSnapshots);
+
+  // Render Question Comparison Chart
+  renderQuestionComparisonChart(state.questionSnapshots);
+
+  // Render Point-Loss Audit List
+  renderPointLossAuditList(state.pointLossAudit);
+
+  // Personalized AI Feedback & Lists
   elements.strengthsList.innerHTML = '';
   elements.improvementsList.innerHTML = '';
 
-  if (posturePct >= 80) addLi(elements.strengthsList, `Maintained strong spinal posture alignment (${posturePct}%).`);
-  if (eyePct >= 75) addLi(elements.strengthsList, `Consistent direct gaze toward camera lens (${eyePct}%).`);
-  if (fillers <= 3) addLi(elements.strengthsList, `Low filler word frequency during speech.`);
+  if (m.postureScore >= 80) addLi(elements.strengthsList, `Strong upright posture alignment (${m.postureScore}%).`);
+  if (m.attentionScore >= 80) addLi(elements.strengthsList, `High visual attention toward camera (${m.attentionScore}%).`);
+  if (speech.fillerCount <= 3) addLi(elements.strengthsList, `Low filler word usage during responses.`);
 
-  if (fillers > 3) addLi(elements.improvementsList, `High filler word count (${fillers} detected).`);
-  if (eyePct < 75) addLi(elements.improvementsList, `Frequent looking away from camera frame.`);
-  if (grammarScore < 80) addLi(elements.improvementsList, `Refine complex sentence structures.`);
+  if (speech.fillerCount > 3) addLi(elements.improvementsList, `Frequent filler words detected (${speech.fillerCount} total).`);
+  if (m.attentionScore < 75) addLi(elements.improvementsList, `Frequent looking away from camera frame.`);
+  if (m.postureScore < 75) addLi(elements.improvementsList, `Posture slouching / tilt detected.`);
 
-  // Auto-Save Session to Backend Database
+  // Auto-Save Session
   try {
     await apiFetch('/api/sessions/save', 'POST', {
       candidateName: state.currentUser.name,
       scenario: state.currentScenario,
       questions: state.conversationTurns,
-      speechMetrics: { wpm, fillerCount: fillers, fillerWordsDetected: state.speech.fillerWordsDetected, grammarScore, vocabScore, fluencyScore },
-      cvMetrics: { eyeContactScore: eyePct, postureScore: posturePct, headStabilityScore: headPct, gestureScore: 80, engagementScore: 85 },
-      overallScore,
-      aiFeedback: feedback
+      speechMetrics: { wpm: speech.wpm, fillerCount: speech.fillerCount, grammarScore: nlpRes.grammarScore, fluencyScore: verbalScore },
+      cvMetrics: { eyeContactScore: m.attentionScore, postureScore: m.postureScore, headStabilityScore: m.postureStability, gestureScore: m.gestureControlScore, engagementScore: m.facialEngagementScore },
+      overallScore
     });
   } catch (e) {}
 }
 
-// ---------------- 11. PROGRESS DASHBOARD & SESSION HISTORY ----------------
-async function loadProgressDashboard() {
-  try {
-    const analytics = await apiFetch('/api/analytics/progress');
-    renderProgressTrendChart(analytics);
-  } catch (e) {}
+function renderQuestionBreakdownTable(snapshots) {
+  elements.questionBreakdownTableBody.innerHTML = '';
+  if (!snapshots || snapshots.length === 0) {
+    elements.questionBreakdownTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No question turns recorded.</td></tr>`;
+    return;
+  }
 
-  try {
-    const history = await apiFetch('/api/sessions/history');
-    renderHistoryTable(history);
-  } catch (e) {}
+  snapshots.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>Q${s.questionIndex}</strong></td>
+      <td>${s.postureScore}%</td>
+      <td>${s.postureStability}%</td>
+      <td>${s.attentionScore}%</td>
+      <td>${s.facialEngagementScore}%</td>
+      <td>${s.gestureControlScore}%</td>
+      <td><strong style="color:var(--primary)">${s.verbalScore}%</strong></td>
+    `;
+    elements.questionBreakdownTableBody.appendChild(tr);
+  });
+}
+
+function renderQuestionComparisonChart(snapshots) {
+  if (questionChartInstance) questionChartInstance.destroy();
+  if (!elements.questionChartCanvas) return;
+
+  const ctx = elements.questionChartCanvas.getContext('2d');
+  const labels = snapshots.map(s => `Q${s.questionIndex}`);
+  const postureData = snapshots.map(s => s.postureScore);
+  const attentionData = snapshots.map(s => s.attentionScore);
+  const gestureData = snapshots.map(s => s.gestureControlScore);
+
+  questionChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.length ? labels : ['Q1'],
+      datasets: [
+        { label: 'Posture', data: postureData.length ? postureData : [88], backgroundColor: '#38bdf8' },
+        { label: 'Attention', data: attentionData.length ? attentionData : [92], backgroundColor: '#10b981' },
+        { label: 'Gesture Ctrl', data: gestureData.length ? gestureData : [85], backgroundColor: '#c084fc' }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { min: 0, max: 100, ticks: { color: '#64748b' } },
+        x: { ticks: { color: '#64748b' } }
+      },
+      plugins: {
+        legend: { position: 'top' }
+      }
+    }
+  });
+}
+
+function renderPointLossAuditList(auditLogs) {
+  elements.pointLossAuditList.innerHTML = '';
+  if (!auditLogs || auditLogs.length === 0) {
+    addLi(elements.pointLossAuditList, 'No persistent deduction events recorded. Excellent performance!');
+    return;
+  }
+  auditLogs.forEach(log => addLi(elements.pointLossAuditList, log));
+}
+
+// ---------------- 11. PROGRESS DASHBOARD & HISTORY ----------------
+async function loadProgressDashboard() {
+  const analytics = await apiFetch('/api/analytics/progress');
+  renderProgressTrendChart(analytics);
+
+  const history = await apiFetch('/api/sessions/history');
+  renderHistoryTable(history);
 }
 
 function renderProgressTrendChart(data) {
   if (progressTrendChartInstance) progressTrendChartInstance.destroy();
+  if (!elements.progressTrendChartCanvas) return;
   const ctx = elements.progressTrendChartCanvas.getContext('2d');
 
   progressTrendChartInstance = new Chart(ctx, {
@@ -956,22 +1190,14 @@ function renderProgressTrendChart(data) {
     data: {
       labels: data.labels || ['Session 1', 'Session 2', 'Session 3'],
       datasets: [
-        { label: 'Overall Score', data: data.overallScore || [73, 79, 83], borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', tension: 0.3, fill: true },
-        { label: 'Eye Contact %', data: data.eyeContact || [68, 75, 81], borderColor: '#10b981', tension: 0.3 },
-        { label: 'Posture %', data: data.posture || [80, 85, 88], borderColor: '#c084fc', tension: 0.3 },
-        { label: 'Grammar %', data: data.grammar || [75, 80, 84], borderColor: '#fbbf24', borderDash: [5, 5], tension: 0.3 }
+        { label: 'Overall Score', data: data.overallScore || [78, 83, 87], borderColor: '#38bdf8', tension: 0.3, fill: false },
+        { label: 'Attention %', data: data.eyeContact || [80, 85, 90], borderColor: '#10b981', tension: 0.3 },
+        { label: 'Posture %', data: data.posture || [82, 86, 91], borderColor: '#c084fc', tension: 0.3 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      scales: {
-        y: { min: 0, max: 100, ticks: { color: '#64748b' }, grid: { color: 'rgba(0,0,0,0.06)' } },
-        x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(0,0,0,0.06)' } }
-      },
-      plugins: {
-        legend: { position: 'top', labels: { color: '#475569', font: { family: 'Plus Jakarta Sans', size: 11, weight: 'bold' } } },
-        title: { display: true, text: 'Multimodal Score Progress Trends (Database Saved)', color: '#0f172a', font: { family: 'Plus Jakarta Sans', size: 14, weight: 'bold' } }
-      }
+      scales: { y: { min: 0, max: 100 } }
     }
   });
 }
@@ -979,7 +1205,7 @@ function renderProgressTrendChart(data) {
 function renderHistoryTable(sessions) {
   elements.historyTableBody.innerHTML = '';
   if (!sessions || sessions.length === 0) {
-    elements.historyTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No sessions recorded yet. Start a practice scenario above!</td></tr>`;
+    elements.historyTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No sessions recorded yet. Start a practice interview above!</td></tr>`;
     return;
   }
 
@@ -992,80 +1218,26 @@ function renderHistoryTable(sessions) {
     tr.innerHTML = `
       <td>${dateStr}</td>
       <td><strong style="color:var(--primary)">${s.scenario || 'Job Interview'}</strong></td>
-      <td>${speech.grammarScore || 80}%</td>
+      <td>${speech.grammarScore || 85}%</td>
       <td>${speech.wpm || 135} WPM</td>
       <td><span style="color:${(speech.fillerCount || 0) > 3 ? 'var(--warning)' : 'var(--success)'}">${speech.fillerCount || 0}</span></td>
-      <td>${cv.eyeContactScore || 80}%</td>
-      <td><strong style="color:#fff">${s.overallScore || 82} / 100</strong></td>
-      <td><button class="btn-secondary" style="padding:4px 10px; font-size:0.78rem;" onclick="viewHistoryDetail('${s._id || s.id}')">View Report</button></td>
+      <td>${cv.eyeContactScore || 85}%</td>
+      <td><strong style="color:var(--primary)">${s.overallScore || 85} / 100</strong></td>
+      <td><button class="btn-secondary" style="padding:4px 10px; font-size:0.78rem;" onclick="showScreen('reportPage')">View Report</button></td>
     `;
     elements.historyTableBody.appendChild(tr);
   });
 }
 
-async function viewHistoryDetail(id) {
-  try {
-    const session = await apiFetch(`/api/sessions/${id}`);
-    showScreen('reportPage');
-    elements.reportScenario.textContent = session.scenario || 'Job Interview';
-    elements.reportScoreOverall.textContent = `${session.overallScore || 85} / 100`;
-    elements.reportGrammarScore.textContent = `${session.speechMetrics ? session.speechMetrics.grammarScore : 82}%`;
-    elements.reportWpmText.textContent = `${session.speechMetrics ? session.speechMetrics.wpm : 140} WPM`;
-    elements.reportFillersText.textContent = `${session.speechMetrics ? session.speechMetrics.fillerCount : 3}`;
-    elements.reportEyeContact.textContent = `${session.cvMetrics ? session.cvMetrics.eyeContactScore : 81}%`;
-    elements.reportPostureScore.textContent = `${session.cvMetrics ? session.cvMetrics.postureScore : 88}%`;
-    elements.reportAiFeedbackText.textContent = session.aiFeedback || "Strong practice session recorded.";
-  } catch (e) {}
-}
-
-// ---------------- 12. TARGETED WEAKNESS PRACTICE MODE ----------------
-function setupWeaknessScreen() {
-  if (state.currentWeakness) {
-    elements.weaknessExTitle.textContent = state.currentWeakness.title;
-    elements.weaknessExDesc.textContent = state.currentWeakness.description;
-  }
-}
-
-function startWeaknessChallenge() {
-  let timeLeft = 60;
-  elements.weaknessTimerText.textContent = "01:00";
-  state.speech.fillerCount = 0;
-  elements.weaknessFillersVal.textContent = "0";
-
-  if (state.speechRecognition) {
-    try { state.speechRecognition.start(); } catch (e) {}
-  }
-
-  const timer = setInterval(() => {
-    timeLeft--;
-    elements.weaknessTimerText.textContent = formatTime(timeLeft);
-    elements.weaknessFillersVal.textContent = state.speech.fillerCount;
-
-    if (timeLeft <= 0) {
-      clearInterval(timer);
-      alert(`Challenge Completed! You recorded ${state.speech.fillerCount} filler words. Progress saved!`);
-      showScreen('dashboardPage');
-    }
-  }, 1000);
-}
-
-// ---------------- 13. UTILITIES & EVENT LISTENERS ----------------
+// ---------------- 12. UTILITIES & INITIALIZATION ----------------
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-function appendFeedbackCard(msg, type = 'good') {
-  const card = document.createElement('div');
-  card.className = `feedback-card ${type}`;
-  const icon = type === 'good' ? 'fa-check-circle' : 'fa-exclamation-triangle';
-  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  card.innerHTML = `<i class="fas ${icon}"></i><div class="feedback-content"><div class="msg">${msg}</div><div class="time">${time}</div></div>`;
-  elements.feedbackList.prepend(card);
-}
-
 function addLi(ul, text) {
+  if (!ul) return;
   const li = document.createElement('li');
   li.textContent = text;
   ul.appendChild(li);
@@ -1087,159 +1259,46 @@ function initVantaHalo() {
         backgroundColor: 0x1c0509,
         baseColor: 0x800020
       });
-    } catch (err) {
-      console.warn("Vanta HALO init note:", err.message);
-    }
+    } catch (err) {}
   }
 }
 
-// DOM Event Listeners Initializer
+// DOM Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
   initVantaHalo();
-  initAuth();
   initModels();
-  loadDashboardData();
 
-  // Navigation Links
   if (elements.navBrandLink) elements.navBrandLink.addEventListener('click', () => showScreen('landingPage'));
   if (elements.navHome) elements.navHome.addEventListener('click', () => showScreen('landingPage'));
   if (elements.navGuide) elements.navGuide.addEventListener('click', scrollToGuide);
   if (elements.navDemo) elements.navDemo.addEventListener('click', startQuickDemo);
   if (elements.navInterview) elements.navInterview.addEventListener('click', startFullInterview);
-  if (elements.navDashboard) elements.navDashboard.addEventListener('click', () => showScreen('dashboardPage'));
-  if (elements.navPractice) elements.navPractice.addEventListener('click', () => showScreen('scenarioPage'));
   if (elements.navHistory) elements.navHistory.addEventListener('click', () => showScreen('historyPage'));
-  if (elements.navWeakness) elements.navWeakness.addEventListener('click', () => showScreen('weaknessPracticePage'));
 
-  // Hero Actions & Launch Cards
   if (elements.heroStartBtn) elements.heroStartBtn.addEventListener('click', startFullInterview);
   if (elements.heroDemoBtn) elements.heroDemoBtn.addEventListener('click', startQuickDemo);
   if (elements.heroGuideBtn) elements.heroGuideBtn.addEventListener('click', scrollToGuide);
   if (elements.startDemoCardBtn) elements.startDemoCardBtn.addEventListener('click', startQuickDemo);
   if (elements.startFullCardBtn) elements.startFullCardBtn.addEventListener('click', startFullInterview);
 
-  // Floating Unmute / Listen Toggle for 3D Digital Assistant Avatar
+  if (elements.startBtn) elements.startBtn.addEventListener('click', launchPracticeSession);
+  if (elements.nextBtn) elements.nextBtn.addEventListener('click', submitTurnAnswer);
+  if (elements.stopBtn) elements.stopBtn.addEventListener('click', finishPracticeSession);
+  if (elements.saveAndDashBtn) elements.saveAndDashBtn.addEventListener('click', () => showScreen('landingPage'));
+  if (elements.restartBtn) elements.restartBtn.addEventListener('click', () => showScreen('inputPage'));
+
+  // 3D Avatar Speaking Toggle
   const avatarUnmuteToggleBtn = document.getElementById('avatarUnmuteToggleBtn');
-  const soundwavesEl = document.getElementById('presenterSoundwaves');
   if (avatarUnmuteToggleBtn) {
     avatarUnmuteToggleBtn.addEventListener('click', () => {
       if ('speechSynthesis' in window) {
-        const icon = document.getElementById('unmuteIcon');
-        const label = document.getElementById('unmuteLabel');
-
         if (window.speechSynthesis.speaking) {
           window.speechSynthesis.cancel();
-          if (soundwavesEl) soundwavesEl.style.opacity = '0';
-          if (icon) icon.className = 'fas fa-volume-mute';
-          if (label) label.textContent = 'Unmute / Listen';
-          avatarUnmuteToggleBtn.classList.remove('speaking');
           return;
         }
-
-        const scriptText = "Welcome! The most important thing in communication is hearing what isn't said. Our platform analyzes your posture, gestures, facial expressions, and speech confidence to help you master non-verbal communication.";
-        const utterance = new SpeechSynthesisUtterance(scriptText);
-        utterance.rate = 0.95;
-        utterance.pitch = 1.05;
-
-        const voices = window.speechSynthesis.getVoices();
-        const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Zira') || v.name.includes('Google US English') || v.name.includes('Samantha'));
-        if (femaleVoice) utterance.voice = femaleVoice;
-
-        utterance.onstart = () => {
-          if (soundwavesEl) soundwavesEl.style.opacity = '1';
-          if (icon) icon.className = 'fas fa-volume-up';
-          if (label) label.textContent = 'Mute / Stop';
-          avatarUnmuteToggleBtn.classList.add('speaking');
-        };
-
-        utterance.onend = () => {
-          if (soundwavesEl) soundwavesEl.style.opacity = '0';
-          if (icon) icon.className = 'fas fa-volume-mute';
-          if (label) label.textContent = 'Unmute / Listen';
-          avatarUnmuteToggleBtn.classList.remove('speaking');
-        };
-
-        utterance.onerror = () => {
-          if (soundwavesEl) soundwavesEl.style.opacity = '0';
-          if (icon) icon.className = 'fas fa-volume-mute';
-          if (label) label.textContent = 'Unmute / Listen';
-          avatarUnmuteToggleBtn.classList.remove('speaking');
-        };
-
-        window.speechSynthesis.speak(utterance);
-      }
-    });
-  }
-
-  // Auth Modals & Actions
-  if (elements.openAuthModalBtn) elements.openAuthModalBtn.addEventListener('click', () => elements.authModal.classList.add('active'));
-  if (elements.closeAuthModalBtn) elements.closeAuthModalBtn.addEventListener('click', () => elements.authModal.classList.remove('active'));
-  if (elements.logoutBtn) elements.logoutBtn.addEventListener('click', logoutUser);
-
-  if (elements.tabLogin) {
-    elements.tabLogin.addEventListener('click', () => {
-      elements.tabLogin.classList.add('active');
-      elements.tabSignup.classList.remove('active');
-      if (elements.groupName) elements.groupName.style.display = 'none';
-      if (elements.groupConfirmPassword) elements.groupConfirmPassword.style.display = 'none';
-      if (elements.groupRole) elements.groupRole.style.display = 'none';
-      if (elements.authSubmitBtn) elements.authSubmitBtn.textContent = 'Sign In to AI Coach';
-    });
-  }
-
-  if (elements.tabSignup) {
-    elements.tabSignup.addEventListener('click', () => {
-      elements.tabSignup.classList.add('active');
-      elements.tabLogin.classList.remove('active');
-      if (elements.groupName) elements.groupName.style.display = 'block';
-      if (elements.groupConfirmPassword) elements.groupConfirmPassword.style.display = 'block';
-      if (elements.groupRole) elements.groupRole.style.display = 'block';
-      if (elements.authSubmitBtn) elements.authSubmitBtn.textContent = 'Create Account & Start Coaching';
-    });
-  }
-
-  if (elements.authSubmitBtn) {
-    elements.authSubmitBtn.addEventListener('click', () => {
-      const email = elements.authEmail ? elements.authEmail.value.trim() : '';
-      const pass = elements.authPassword ? elements.authPassword.value : '';
-      if (elements.tabSignup && elements.tabSignup.classList.contains('active')) {
-        const name = elements.authName ? elements.authName.value.trim() : '';
-        const confirmPass = elements.authConfirmPassword ? elements.authConfirmPassword.value : '';
-        const role = elements.authRole ? elements.authRole.value : 'Software Engineer';
-        signupUser(name, email, pass, confirmPass, role);
-      } else {
-        loginUser(email, pass);
-      }
-    });
-  }
-
-  // Scenario Card Selectors
-  document.querySelectorAll('.scenario-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const scen = card.getAttribute('data-scenario');
-      elements.selectScenario.value = scen;
-      showScreen('scenarioPage');
-    });
-  });
-
-  // Action Buttons
-  if (elements.practiceWeaknessBtn) elements.practiceWeaknessBtn.addEventListener('click', () => showScreen('weaknessPracticePage'));
-  if (elements.launchPracticeBtn) elements.launchPracticeBtn.addEventListener('click', launchPracticeSession);
-  if (elements.submitTurnBtn) elements.submitTurnBtn.addEventListener('click', submitTurnAnswer);
-  if (elements.stopBtn) elements.stopBtn.addEventListener('click', finishPracticeSession);
-  if (elements.saveAndDashBtn) elements.saveAndDashBtn.addEventListener('click', () => showScreen('dashboardPage'));
-  if (elements.restartBtn) elements.restartBtn.addEventListener('click', () => showScreen('scenarioPage'));
-  if (elements.startWeaknessExBtn) elements.startWeaknessExBtn.addEventListener('click', startWeaknessChallenge);
-
-  if (elements.toggleRecBtn) {
-    elements.toggleRecBtn.addEventListener('click', () => {
-      state.isRecordingMic = !state.isRecordingMic;
-      if (state.isRecordingMic) {
-        elements.toggleRecBtn.innerHTML = `<i class="fas fa-microphone"></i> Pause Mic`;
-        elements.sttStatus.textContent = "Listening...";
-      } else {
-        elements.toggleRecBtn.innerHTML = `<i class="fas fa-microphone-slash"></i> Resume Mic`;
-        elements.sttStatus.textContent = "Mic Paused";
+        const text = "Welcome! Master your interview non-verbal communication with real-time MediaPipe computer vision.";
+        const utt = new SpeechSynthesisUtterance(text);
+        window.speechSynthesis.speak(utt);
       }
     });
   }

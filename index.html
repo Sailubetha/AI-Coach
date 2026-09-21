@@ -465,22 +465,22 @@
             <video id="webcam" autoplay playsinline muted></video>
             <canvas id="overlay"></canvas>
 
-            <!-- MediaPipe Indicators (🟢 / 🟡) -->
+            <!-- MediaPipe Indicators (🟢 / 🟡 / 🔴) -->
             <div class="overlay-detection-panel">
-              <div class="detection-pill" id="indicatorEye">
-                <div class="status-dot ready"></div> EYE CONTACT: <span class="val" id="valEyeContact">🟢 EYE CONTACT</span>
-              </div>
               <div class="detection-pill" id="indicatorPosture">
-                <div class="status-dot ready"></div> POSTURE: <span class="val" id="valPosture">🟢 GOOD POSTURE</span>
+                <div class="status-dot ready"></div> POSTURE: <span class="val" id="valPosture">Upright (Stability: 100%)</span>
               </div>
-              <div class="detection-pill" id="indicatorHead">
-                <div class="status-dot ready"></div> HEAD STABILITY: <span class="val" id="valHead">🟢 HEAD STABLE</span>
+              <div class="detection-pill" id="indicatorAttention">
+                <div class="status-dot ready"></div> ATTENTION: <span class="val" id="valEyeContact">FACING CAMERA (100%)</span>
               </div>
-              <div class="detection-pill">
-                GESTURE: <span class="val" id="valGesture">INITIALIZING...</span>
+              <div class="detection-pill" id="indicatorFace">
+                <div class="status-dot ready"></div> FACIAL: <span class="val" id="valFaceExpression">Neutral (Engage: 85%)</span>
               </div>
-              <div class="detection-pill">
-                SPEECH: <span class="val" id="valSpeech">ACTIVE</span>
+              <div class="detection-pill" id="indicatorGesture">
+                <div class="status-dot ready"></div> GESTURE: <span class="val" id="valGesture">NATURAL</span>
+              </div>
+              <div class="detection-pill" id="indicatorSpeech">
+                <div class="status-dot ready"></div> SPEECH: <span class="val" id="valSpeech">ACTIVE</span>
               </div>
             </div>
 
@@ -535,51 +535,102 @@
       <div class="report-card">
         <div class="report-header">
           <h2>Interview Performance & Analytics Report</h2>
-          <p>Multimodal Speech, NLP & MediaPipe Computer Vision Evaluation for <strong id="reportName" style="color:var(--primary)">Candidate</strong> (<span id="reportRole">Role</span>)</p>
+          <p>Multimodal MediaPipe Computer Vision & Speech Analysis for <strong id="reportName" style="color:var(--primary)">Candidate</strong> (<span id="reportRole">Role</span>)</p>
         </div>
 
         <div style="text-align:center; margin-bottom:24px;">
           <span style="font-size:0.95rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Overall Communication Presence Score</span>
           <div style="font-size:3.5rem; font-weight:800; color:var(--primary);" id="reportScoreOverall">85 / 100</div>
-          <div style="font-size:0.82rem; color:var(--text-muted);">Formula: Language 35% + Speech 35% + Non-Verbal Vision 30%</div>
+          <div style="font-size:0.82rem; color:var(--text-muted);">Formula: 60% Non-Verbal Presence + 40% Verbal Delivery</div>
         </div>
 
-        <!-- 3-Category Score Breakdown Grid -->
+        <!-- Score Breakdown Grid -->
         <div class="report-sections-grid">
           
+          <!-- Non-Verbal Presence (Confidence Indicators) -->
           <div class="report-section-card">
-            <div class="card-title blue"><i class="fas fa-language"></i> Language (NLP)</div>
-            <div class="metric-line"><span>Grammar Precision</span><strong id="reportGrammarScore" style="color:var(--success)">82%</strong></div>
-            <div class="metric-line"><span>Vocabulary Complexity</span><strong id="reportVocabScore" style="color:var(--primary)">74%</strong></div>
-            <div class="metric-line"><span>Speech Fluency</span><strong id="reportFluencyScore" style="color:var(--accent)">78%</strong></div>
+            <div class="card-title green"><i class="fas fa-user-check"></i> Non-Verbal Presence (60%)</div>
+            <div class="metric-line"><span>Posture Score (25%)</span><strong id="reportPostureScore" style="color:var(--primary)">88 / 100</strong></div>
+            <div class="metric-line"><span>Posture Stability (15%)</span><strong id="reportPostureStability" style="color:var(--success)">92%</strong></div>
+            <div class="metric-line"><span>Visual Attention (20%)</span><strong id="reportEyeContact" style="color:var(--success)">85%</strong></div>
+            <div class="metric-line"><span>Gesture Control (20%)</span><strong id="reportGestureControl" style="color:var(--primary)">80%</strong></div>
+            <div class="metric-line"><span>Facial Engagement (20%)</span><strong id="reportFacialEngage" style="color:var(--accent)">78%</strong></div>
           </div>
 
+          <!-- Verbal Delivery -->
           <div class="report-section-card">
-            <div class="card-title orange"><i class="fas fa-microphone-alt"></i> Speech & Delivery</div>
+            <div class="card-title orange"><i class="fas fa-microphone-alt"></i> Verbal Delivery (40%)</div>
             <div class="metric-line"><span>Speaking Speed</span><strong id="reportWpmText" style="color:var(--primary)">142 WPM</strong></div>
             <div class="metric-line"><span>Filler Words Count</span><strong id="reportFillersText" style="color:var(--warning)">6</strong></div>
+            <div class="metric-line"><span>Speech Fluency</span><strong id="reportFluencyScore" style="color:var(--success)">82%</strong></div>
             <div class="metric-line"><span>Fillers Breakdown</span><span id="reportFillersListText" style="font-size:0.8rem; color:var(--text-muted)">um (3), uh (2), like (1)</span></div>
           </div>
 
+          <!-- Basic NLP Language Analysis -->
           <div class="report-section-card">
-            <div class="card-title green"><i class="fas fa-video"></i> Non-Verbal (MediaPipe)</div>
-            <div class="metric-line"><span>Camera Eye Contact</span><strong id="reportEyeContact" style="color:var(--success)">81%</strong></div>
-            <div class="metric-line"><span>Posture Alignment</span><strong id="reportPostureScore" style="color:var(--primary)">88%</strong></div>
-            <div class="metric-line"><span>Head Stability</span><strong id="reportHeadStability" style="color:var(--accent)">76%</strong></div>
+            <div class="card-title blue"><i class="fas fa-language"></i> Basic NLP Language Analysis</div>
+            <div class="metric-line"><span>Grammar Accuracy</span><strong id="reportGrammarScore" style="color:var(--success)">88%</strong></div>
+            <div class="metric-line"><span>Vocabulary Score</span><strong id="reportVocabScore" style="color:var(--primary)">76%</strong></div>
+            <div style="margin-top:10px; font-size:0.82rem; color:var(--text-muted);" id="nlpSuggestionsBox">
+              <strong>Grammar & Rephrasing Suggestions:</strong>
+              <ul id="nlpSuggestionsList" style="margin-top:4px; padding-left:16px;">
+                <li>No significant grammar issues detected.</li>
+              </ul>
+            </div>
           </div>
 
         </div>
 
+        <!-- Question-Wise Results Table -->
+        <div style="margin-top: 32px; background: rgba(255,255,255,0.7); padding: 20px; border-radius: 16px; border: 1px solid rgba(226,232,240,0.8);">
+          <h3 style="color:#0f172a; font-size:1.1rem; margin-bottom:12px;"><i class="fas fa-list-ol"></i> Question-Wise Performance Breakdown</h3>
+          <div style="overflow-x:auto;">
+            <table class="history-table" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>Q#</th>
+                  <th>Posture</th>
+                  <th>Stability</th>
+                  <th>Attention</th>
+                  <th>Facial Engage</th>
+                  <th>Gesture Ctrl</th>
+                  <th>Verbal Score</th>
+                </tr>
+              </thead>
+              <tbody id="questionBreakdownTableBody">
+                <!-- Dynamically populated per question turn -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Question Comparison Chart -->
+        <div class="chart-box" style="margin-top: 24px;">
+          <h4 style="margin-bottom:12px; color:#0f172a;"><i class="fas fa-chart-bar"></i> Question-by-Question Analytics</h4>
+          <div style="position:relative; width:100%; height:260px;">
+            <canvas id="questionChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Point-Loss Audit System -->
+        <div style="margin-top: 24px; background: #fff5f5; border: 1px solid #fed7d7; border-radius: 16px; padding: 20px;">
+          <h4 style="color:#c53030; margin-bottom:8px;"><i class="fas fa-clipboard-check"></i> Point-Loss Audit & Observations</h4>
+          <p style="font-size:0.85rem; color:#742a2a; margin-bottom:12px;">Transparent log of non-verbal or speech behaviors that persisted beyond acceptable limits during the interview.</p>
+          <ul id="pointLossAuditList" style="padding-left:20px; color:#9b2c2c; font-size:0.9rem;">
+            <li>No persistent deduction events recorded. Great performance!</li>
+          </ul>
+        </div>
+
         <!-- Contextual AI Coaching Feedback Box -->
-        <div class="ai-feedback-container">
+        <div class="ai-feedback-container" style="margin-top:24px;">
           <h4><i class="fas fa-robot"></i> Personalized AI Coaching Feedback</h4>
           <p id="reportAiFeedbackText">
-            "Your language was clear and your posture was consistent. You used several filler words while formulating your answers. Try pausing briefly instead of using filler words to boost your score."
+            "Your language was clear and your posture was consistent. Maintain steady eye contact and balance natural hand gestures."
           </p>
         </div>
 
         <!-- Strengths & Recommendations -->
-        <div class="report-grid">
+        <div class="report-grid" style="margin-top:24px;">
           <div class="insight-section strengths">
             <h4><i class="fas fa-thumbs-up"></i> Identified Strengths</h4>
             <ul id="strengthsList"></ul>
