@@ -852,11 +852,26 @@ function updateLiveUIElements() {
   }
 }
 
+// Helper function to verify active user login before accessing demo or interview
+function requireAuth(actionName = 'access the AI interview & quick demo') {
+  const activeUser = localStorage.getItem('ai_coach_active_user');
+  if (!activeUser) {
+    openAuthModal();
+    showAuthError(`Please login or create an account to ${actionName}.`);
+    return false;
+  }
+  return true;
+}
+
 // Draw Dynamic Reference Lines, Pose Skeleton, and 21-Landmark Hand Skeleton on Overlay Canvas
 function drawOverlaySkeleton(ctx) {
   const w = elements.overlay.width;
   const h = elements.overlay.height;
   ctx.clearRect(0, 0, w, h);
+
+  // Coordinate mapping for mirrored webcam video (#webcam scaleX(-1))
+  const mapX = (x) => (1 - x) * w;
+  const mapY = (y) => y * h;
 
   // Status color for posture guides based on live posture evaluation
   let statusColor = '#34d399'; // Default Good (Emerald Green)
@@ -875,17 +890,17 @@ function drawOverlaySkeleton(ctx) {
     const hasNose = lm[0] && lm[0].visibility > 0.3;
 
     if (hasShoulders && hasHips) {
-      const sLeft = { x: lm[11].x * w, y: lm[11].y * h };
-      const sRight = { x: lm[12].x * w, y: lm[12].y * h };
-      const hLeft = { x: lm[23].x * w, y: lm[23].y * h };
-      const hRight = { x: lm[24].x * w, y: lm[24].y * h };
+      const sLeft = { x: mapX(lm[11].x), y: mapY(lm[11].y) };
+      const sRight = { x: mapX(lm[12].x), y: mapY(lm[12].y) };
+      const hLeft = { x: mapX(lm[23].x), y: mapY(lm[23].y) };
+      const hRight = { x: mapX(lm[24].x), y: mapY(lm[24].y) };
 
       const shoulderCenter = { x: (sLeft.x + sRight.x) / 2, y: (sLeft.y + sRight.y) / 2 };
       const hipCenter = { x: (hLeft.x + hRight.x) / 2, y: (hLeft.y + hRight.y) / 2 };
       const bodyCenter = { x: (shoulderCenter.x + hipCenter.x) / 2, y: (shoulderCenter.y + hipCenter.y) / 2 };
 
       // 1. Vertical Posture Alignment Reference Line (Head -> Body Center -> Lower Body)
-      const topY = hasNose ? Math.max(10, lm[0].y * h - 25) : Math.max(10, shoulderCenter.y - 90);
+      const topY = hasNose ? Math.max(10, mapY(lm[0].y) - 25) : Math.max(10, shoulderCenter.y - 90);
       const bottomY = Math.min(h - 10, hipCenter.y + 70);
 
       ctx.save();
@@ -926,7 +941,7 @@ function drawOverlaySkeleton(ctx) {
 
       // 4. Head / Neck Alignment Guide Line (Nose -> Shoulder Center)
       if (hasNose) {
-        const nosePt = { x: lm[0].x * w, y: lm[0].y * h };
+        const nosePt = { x: mapX(lm[0].x), y: mapY(lm[0].y) };
         ctx.save();
         ctx.beginPath();
         ctx.setLineDash([4, 4]);
@@ -954,7 +969,7 @@ function drawOverlaySkeleton(ctx) {
       poseKeypoints.forEach(idx => {
         if (lm[idx] && lm[idx].visibility > 0.3) {
           ctx.beginPath();
-          ctx.arc(lm[idx].x * w, lm[idx].y * h, 4.5, 0, 2 * Math.PI);
+          ctx.arc(mapX(lm[idx].x), mapY(lm[idx].y), 4.5, 0, 2 * Math.PI);
           ctx.fillStyle = statusColor;
           ctx.shadowColor = '#ffffff';
           ctx.shadowBlur = 4;
@@ -967,7 +982,7 @@ function drawOverlaySkeleton(ctx) {
       const shoulderAlignText = shoulderSlope < (h * 0.035) ? "Shoulders: ALIGNED" : "Shoulders: UNEVEN";
       ctx.font = '700 11px sans-serif';
       ctx.fillStyle = statusColor;
-      ctx.fillText(shoulderAlignText, sLeft.x - 10, Math.min(sLeft.y, sRight.y) - 10);
+      ctx.fillText(shoulderAlignText, Math.min(sLeft.x, sRight.x) + 10, Math.min(sLeft.y, sRight.y) - 10);
     }
   }
 
@@ -978,7 +993,7 @@ function drawOverlaySkeleton(ctx) {
     [10, 152, 234, 454, 61, 291, 33, 263].forEach(idx => {
       if (lm[idx]) {
         ctx.beginPath();
-        ctx.arc(lm[idx].x * w, lm[idx].y * h, 2, 0, 2 * Math.PI);
+        ctx.arc(mapX(lm[idx].x), mapY(lm[idx].y), 2, 0, 2 * Math.PI);
         ctx.fill();
       }
     });
@@ -1006,7 +1021,7 @@ function drawOverlaySkeleton(ctx) {
     state.latestHandLandmarks.forEach(hand => {
       // Record Wrist Position for Movement Trail
       if (hand[0]) {
-        state.wristTrail.push({ x: hand[0].x * w, y: hand[0].y * h });
+        state.wristTrail.push({ x: mapX(hand[0].x), y: mapY(hand[0].y) });
         if (state.wristTrail.length > 18) state.wristTrail.shift();
       }
 
@@ -1014,8 +1029,8 @@ function drawOverlaySkeleton(ctx) {
       handBones.forEach(([i1, i2]) => {
         if (hand[i1] && hand[i2]) {
           ctx.beginPath();
-          ctx.moveTo(hand[i1].x * w, hand[i1].y * h);
-          ctx.lineTo(hand[i2].x * w, hand[i2].y * h);
+          ctx.moveTo(mapX(hand[i1].x), mapY(hand[i1].y));
+          ctx.lineTo(mapX(hand[i2].x), mapY(hand[i2].y));
           ctx.strokeStyle = '#c084fc';
           ctx.lineWidth = 2.5;
           ctx.stroke();
@@ -1026,7 +1041,7 @@ function drawOverlaySkeleton(ctx) {
       hand.forEach((pt, idx) => {
         const isFingertip = [4, 8, 12, 16, 20].includes(idx);
         ctx.beginPath();
-        ctx.arc(pt.x * w, pt.y * h, isFingertip ? 4.5 : 3, 0, 2 * Math.PI);
+        ctx.arc(mapX(pt.x), mapY(pt.y), isFingertip ? 4.5 : 3, 0, 2 * Math.PI);
         ctx.fillStyle = isFingertip ? '#34d399' : '#f3e5ab';
         ctx.shadowColor = isFingertip ? '#34d399' : 'transparent';
         ctx.shadowBlur = isFingertip ? 6 : 0;
@@ -1065,19 +1080,22 @@ function drawOverlaySkeleton(ctx) {
 
 // ---------------- 9. PRACTICE SESSION & INTERVIEW FLOW ----------------
 function startQuickDemo() {
+  if (!requireAuth('access the Quick Demo')) return;
   state.isDemoMode = true;
   state.currentScenario = 'Quick Demo (1 Question)';
-  elements.username.value = 'Demo Candidate';
+  if (elements.username) elements.username.value = state.currentUser?.name || 'Demo Candidate';
   launchPracticeSession();
 }
 
 function startFullInterview() {
+  if (!requireAuth('start the AI practice interview')) return;
   state.isDemoMode = false;
   state.currentScenario = 'Job Interview';
   showScreen('inputPage');
 }
 
 async function launchPracticeSession() {
+  if (!requireAuth('launch an interview practice session')) return;
   const nameInput = elements.username ? elements.username.value.trim() : '';
   const roleInput = elements.role ? elements.role.value : 'Software Engineer';
 
