@@ -1425,6 +1425,9 @@ let vantaHaloEffect = null;
 function initVantaHalo() {
   if (window.VANTA && window.VANTA.HALO && document.getElementById('vanta-bg')) {
     try {
+      if (vantaHaloEffect && typeof vantaHaloEffect.destroy === 'function') {
+        vantaHaloEffect.destroy();
+      }
       vantaHaloEffect = window.VANTA.HALO({
         el: "#vanta-bg",
         mouseControls: true,
@@ -1437,9 +1440,32 @@ function initVantaHalo() {
         backgroundColor: 0x1a0407,
         baseColor: 0x800020
       });
-    } catch (err) {}
+    } catch (err) {
+      console.warn("Vanta WebGL background initialization notice:", err);
+    }
   }
 }
+
+// Window resize and orientation listeners to guarantee WebGL plays on all screen resolutions
+window.addEventListener('resize', () => {
+  if (vantaHaloEffect && typeof vantaHaloEffect.resize === 'function') {
+    vantaHaloEffect.resize();
+  }
+});
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    if (vantaHaloEffect && typeof vantaHaloEffect.resize === 'function') {
+      vantaHaloEffect.resize();
+    }
+  }, 250);
+});
+
+window.addEventListener('load', () => {
+  if (!vantaHaloEffect) {
+    initVantaHalo();
+  }
+});
 
 // DOM Event Listeners Initializer
 document.addEventListener('DOMContentLoaded', () => {
