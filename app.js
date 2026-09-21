@@ -1256,8 +1256,8 @@ function initVantaHalo() {
         minWidth: 200.00,
         amplitudeFactor: 1.5,
         size: 1.25,
-        backgroundColor: 0x0b0f19,
-        baseColor: 0x0284c7
+        backgroundColor: 0x1a0407,
+        baseColor: 0x800020
       });
     } catch (err) {}
   }
