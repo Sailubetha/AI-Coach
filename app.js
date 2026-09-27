@@ -32,7 +32,6 @@ let state = {
   pose: null,
   hands: null,
   faceMesh: null,
-  tmModel: null,
   webcamStream: null,
   animFrameId: null,
 
@@ -628,16 +627,8 @@ function analyzeBasicNLP(transcript) {
 
 // ---------------- 7. MODEL INITIALIZATION & SPEECH STT ----------------
 async function initModels() {
-  // A. Teachable Machine Model
-  try {
-    updateStatus(elements.statusGesture, 'loading');
-    if (window.tmImage) {
-      state.tmModel = await tmImage.load('./model/model.json', './model/metadata.json');
-      updateStatus(elements.statusGesture, 'ready', 'Gesture');
-    }
-  } catch (e) {
-    updateStatus(elements.statusGesture, 'ready', 'Gesture');
-  }
+  // A. Gesture status (actual detection runs via MediaPipe Hands, initialized below)
+  updateStatus(elements.statusGesture, 'ready', 'Gesture');
 
   // B. MediaPipe Pose
   try {

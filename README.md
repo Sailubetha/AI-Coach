@@ -63,12 +63,7 @@ AI_Interview_Coach/
 ├── style.css         # Modern Design System (Glassmorphic Dark Theme)
 ├── app.js            # Multimodal Vision, Speech & NLP Engine
 ├── vercel.json       # Vercel Configuration File
-├── README.md         # Documentation
-│
-└── model/            # Teachable Machine Vision Model
-    ├── model.json
-    ├── metadata.json
-    └── weights.bin
+└── README.md         # Documentation
 ```
 
 ---
