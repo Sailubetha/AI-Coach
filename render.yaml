@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ai-body-language-coach
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false

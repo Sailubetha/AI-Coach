@@ -3,9 +3,12 @@
  * Robust MediaPipe Computer Vision (Pose, Face Mesh, Hands), Temporal Smoothing, NLP & Scoring
  */
 
-const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '5000' && window.location.port !== ''
-  ? 'http://localhost:5000'
-  : window.location.origin;
+// Backend address. config.js sets window.APP_CONFIG.API_URL when the site is hosted separately
+// from the server (e.g. site on Vercel, server on Render). Empty = same origin as the page.
+const API_BASE_URL = ((window.APP_CONFIG && window.APP_CONFIG.API_URL) || '').replace(/\/+$/, '')
+  || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '5000' && window.location.port !== ''
+    ? 'http://localhost:5000'
+    : window.location.origin);
 
 // ---------------- 1. APPLICATION STATE ----------------
 let state = {
@@ -702,8 +705,7 @@ function initSpeechAnalysis() {
       }
 
       this.stopWave = startMicWave(this.micStream);
-      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      this.socket = new WebSocket(`${wsProtocol}//${location.host}/ws/speech`);
+      this.socket = new WebSocket(`${API_BASE_URL.replace(/^http/, 'ws')}/ws/speech`);
 
       this.socket.onopen = () => {
         try {
