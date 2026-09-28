@@ -31,6 +31,9 @@
 </head>
 <body>
 
+  <!-- Toast notifications container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
   <!-- 3D Vanta HALO Interactive Background Container -->
   <div id="vanta-bg"></div>
 
@@ -63,7 +66,7 @@
             <span class="user-name" id="headerUserName">Candidate</span>
             <span class="user-role" id="headerUserRole">Software Engineer</span>
           </div>
-          <button class="btn-sm-logout" id="logoutBtn" title="Sign Out"><i class="fas fa-sign-out-alt"></i></button>
+          <button class="btn-sm-logout" id="logoutBtn" title="Sign Out" aria-label="sign out alt"><i class="fas fa-sign-out-alt"></i></button>
         </div>
         <button class="btn-auth glow-button" id="openAuthModalBtn">
           <i class="fas fa-user-circle"></i> Login / Register
@@ -89,22 +92,28 @@
         <form id="authForm" onsubmit="return false;">
           <div class="form-group" id="groupName" style="display:none;">
             <label for="authName">Full Name</label>
-            <input type="text" id="authName" class="form-control" placeholder="e.g. Alex Johnson">
+            <input type="text" id="authName" class="form-control" placeholder="e.g. Alex Johnson" autocomplete="name">
+            <small class="field-err" id="err-authName" role="alert"></small>
           </div>
 
           <div class="form-group">
             <label for="authEmail">Email Address</label>
-            <input type="email" id="authEmail" class="form-control" placeholder="name@example.com">
+            <input type="email" id="authEmail" class="form-control" placeholder="name@example.com" autocomplete="email">
+            <small class="field-err" id="err-authEmail" role="alert"></small>
           </div>
 
           <div class="form-group">
             <label for="authPassword">Password</label>
-            <input type="password" id="authPassword" class="form-control" placeholder="••••••••">
+            <input type="password" id="authPassword" class="form-control" placeholder="••••••••" autocomplete="current-password">
+            <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">Show</button>
+            <small class="field-err" id="err-authPassword" role="alert"></small>
+            <div id="pwMeter" class="pw-meter" style="display:none;" aria-live="polite"><div class="pw-bar"><span id="pwFill"></span></div><small id="pwLabel"></small></div>
           </div>
 
           <div class="form-group" id="groupConfirmPassword" style="display:none;">
             <label for="authConfirmPassword">Confirm Password</label>
-            <input type="password" id="authConfirmPassword" class="form-control" placeholder="Re-enter password">
+            <input type="password" id="authConfirmPassword" class="form-control" placeholder="Re-enter password" autocomplete="new-password">
+            <small class="field-err" id="err-authConfirmPassword" role="alert"></small>
           </div>
 
           <div class="form-group" id="groupRole" style="display:none;">
@@ -521,6 +530,7 @@
           <div class="transcript-box">
             <div class="transcript-title">
               <span><i class="fas fa-microphone-alt"></i> Your Live Speech Transcript</span>
+              <canvas id="micWave" width="120" height="24" aria-label="Microphone level" role="img"></canvas>
               <span style="font-size:0.75rem; color:var(--text-muted);" id="sttStatus">Listening...</span>
             </div>
             <div class="transcript-content" id="liveTranscript">
@@ -628,6 +638,7 @@
         <div style="text-align:center; margin-bottom:28px;">
           <span style="font-size:0.95rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;">Overall Communication Presence Score</span>
           <div style="font-size:3.8rem; font-weight:800; color:var(--primary); margin:8px 0;" id="reportScoreOverall">85 / 100</div>
+          <div class="score-track" aria-hidden="true"><span id="reportScoreBar"></span></div>
           <div style="font-size:0.85rem; color:var(--text-muted);">Formula: 60% Non-Verbal Presence + 40% Verbal Delivery</div>
         </div>
 
@@ -784,5 +795,6 @@
 
   <!-- Custom Logic -->
   <script src="app.js"></script>
+<div id="toastHost" class="toast-host" role="status" aria-live="polite"></div>
 </body>
 </html>

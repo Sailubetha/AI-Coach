@@ -675,36 +675,74 @@ async function initModels() {
   initSpeechAnalysis();
 }
 
+// Cloud streaming STT (Deepgram, relayed through our own server at /ws/speech).
+// Replaces the old browser webkitSpeechRecognition — same start()/stop() shape,
+// so every other call site (line ~783, ~1118) needs no changes.
 function initSpeechAnalysis() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
+  if (!navigator.mediaDevices || !window.MediaRecorder || !window.WebSocket) {
     state.speech.isAvailable = false;
     updateStatus(elements.statusSpeech, 'error', 'Speech Unsupported');
     return;
   }
 
-  try {
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+  const fillersList = ['um', 'uh', 'like', 'actually', 'basically', 'you know'];
 
-    const fillersList = ['um', 'uh', 'like', 'actually', 'basically', 'you know'];
+  state.speechRecognition = {
+    micStream: null,
+    recorder: null,
+    socket: null,
 
-    recognition.onresult = (event) => {
-      let turnTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          turnTranscript += event.results[i][0].transcript.toLowerCase() + ' ';
-        }
+    async start() {
+      try {
+        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        updateStatus(elements.statusSpeech, 'error', 'Mic Denied');
+        showToast('Microphone access was blocked. Allow it in the browser to get live transcription.', 'error', 6000);
+        return;
       }
 
-      if (turnTranscript) {
+      this.stopWave = startMicWave(this.micStream);
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.socket = new WebSocket(`${wsProtocol}//${location.host}/ws/speech`);
+
+      this.socket.onopen = () => {
+        try {
+          const mt = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t));
+          this.recorder = new MediaRecorder(this.micStream, mt ? { mimeType: mt } : undefined);
+        } catch (e) {
+          updateStatus(elements.statusSpeech, 'error', 'Recorder Error');
+          return;
+        }
+        this.recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0 && this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(e.data);
+          }
+        };
+        this.recorder.start(250);
+        updateStatus(elements.statusSpeech, 'ready', 'Speech Active');
+      };
+
+      this.socket.onmessage = (evt) => {
+        let msg;
+        try { msg = JSON.parse(evt.data); } catch (e) { return; }
+        if (msg.type === 'error') { updateStatus(elements.statusSpeech, 'error', 'Speech Error'); showToast('Speech engine hiccup — your answer is still being recorded.', 'error'); return; }
+        if (msg.type !== 'transcript') return;
+
+        const alt = msg.data && msg.data.channel && msg.data.channel.alternatives && msg.data.channel.alternatives[0];
+        if (!alt || !alt.transcript) return;
+        const text = alt.transcript.toLowerCase();
+
+        if (!msg.data.is_final) {
+          if (elements.liveTranscript) elements.liveTranscript.textContent = state.speech.currentTurnTranscript + text;
+          return;
+        }
+
+        const turnTranscript = text + ' ';
         state.speech.transcript += turnTranscript;
         state.speech.currentTurnTranscript += turnTranscript;
         if (elements.liveTranscript) elements.liveTranscript.textContent = state.speech.currentTurnTranscript;
 
-        const words = turnTranscript.trim().split(/\s+/);
+        const words = turnTranscript.trim().split(/\s+/).filter(Boolean);
         state.speech.wordCount += words.length;
 
         fillersList.forEach((filler) => {
@@ -720,21 +758,29 @@ function initSpeechAnalysis() {
         if (durationMins > 0.05) {
           state.speech.wpm = Math.round(state.speech.wordCount / durationMins);
         }
-
         if (elements.liveWpmVal) elements.liveWpmVal.textContent = `${state.speech.wpm} WPM`;
         if (elements.liveFillersVal) elements.liveFillersVal.textContent = state.speech.fillerCount;
-      }
-    };
+      };
 
-    recognition.onerror = () => {};
+      this.socket.onerror = (e) => {
+        console.error('[speech] WebSocket error', e);
+        updateStatus(elements.statusSpeech, 'error', 'Speech Error');
+      };
+      this.socket.onclose = (e) => {
+        console.log('[speech] WebSocket closed', e.code, e.reason);
+      };
+    },
 
-    state.speechRecognition = recognition;
-    state.speech.isAvailable = true;
-    updateStatus(elements.statusSpeech, 'ready', 'Speech Active');
-  } catch (e) {
-    state.speech.isAvailable = false;
-    updateStatus(elements.statusSpeech, 'error', 'Speech Error');
-  }
+    stop() {
+      try { if (this.recorder && this.recorder.state !== 'inactive') this.recorder.stop(); } catch (e) {}
+      try { if (this.stopWave) { this.stopWave(); this.stopWave = null; } } catch (e) {}
+      try { if (this.socket) this.socket.close(); } catch (e) {}
+      try { if (this.micStream) this.micStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    }
+  };
+
+  state.speech.isAvailable = true;
+  updateStatus(elements.statusSpeech, 'ready', 'Speech Ready');
 }
 
 function updateStatus(el, status, text) {
@@ -1227,6 +1273,7 @@ async function generateUnifiedReport() {
 
   // Populate Basic NLP Card
   elements.reportGrammarScore.textContent = `${nlpRes.grammarScore}%`;
+  animateReportNumbers(overallScore);
   elements.nlpSuggestionsList.innerHTML = '';
   nlpRes.suggestions.forEach(s => addLi(elements.nlpSuggestionsList, s));
 
@@ -1401,8 +1448,10 @@ function addLi(ul, text) {
   ul.appendChild(li);
 }
 
-// ---------------- 13. DEMO AUTHENTICATION ENGINE (LOCALSTORAGE) ----------------
+// ---------------- 13. AUTHENTICATION (server JWT session) ----------------
 function initAuth() {
+  localStorage.removeItem('ai_coach_demo_users'); // legacy plaintext-password store
+
   const activeUser = JSON.parse(localStorage.getItem('ai_coach_active_user') || 'null');
   if (activeUser) {
     state.currentUser = activeUser;
@@ -1514,67 +1563,51 @@ function setAuthMode(mode) {
   }
 }
 
-function handleAuthSubmit() {
+async function handleAuthSubmit() {
   clearAuthMessages();
 
   const email = (document.getElementById('authEmail')?.value || '').trim();
   const password = document.getElementById('authPassword')?.value || '';
+  const btn = document.getElementById('authSubmitBtn');
+  const idleLabel = isSignupMode ? 'Create Account' : 'Login';
 
-  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-
+  const body = { email, password };
   if (isSignupMode) {
-    const name = (document.getElementById('authName')?.value || '').trim();
-    const confirmPassword = document.getElementById('authConfirmPassword')?.value || '';
-    const role = document.getElementById('authRole')?.value || 'Software Engineer';
+    body.name = (document.getElementById('authName')?.value || '').trim();
+    body.role = document.getElementById('authRole')?.value || 'Software Engineer';
+  }
 
-    if (!name) return showAuthError("Please enter your name.");
-    if (!email) return showAuthError("Please enter your email address.");
-    if (!isValidEmail(email)) return showAuthError("Please enter a valid email address.");
-    if (!password) return showAuthError("Please enter a password.");
-    if (password.length < 6) return showAuthError("Password must be at least 6 characters long.");
-    if (password !== confirmPassword) return showAuthError("Passwords do not match.");
+  if (btn) { btn.disabled = true; btn.textContent = isSignupMode ? 'Creating account…' : 'Signing in…'; }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/${isSignupMode ? 'signup' : 'login'}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) return showAuthError(data.error || 'Something went wrong. Please try again.');
 
-    const users = JSON.parse(localStorage.getItem('ai_coach_demo_users') || '[]');
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-      return showAuthError("An account with this email already exists.");
-    }
+    // Real session: JWT from the server. The password is never stored in the browser.
+    state.authToken = data.token;
+    localStorage.setItem('ai_coach_token', data.token);
+    localStorage.setItem('ai_coach_active_user', JSON.stringify(data.user));
+    state.currentUser = data.user;
+    updateAuthUI(data.user);
 
-    const newUser = { name, email, password, role };
-    users.push(newUser);
-    localStorage.setItem('ai_coach_demo_users', JSON.stringify(users));
-
-    localStorage.setItem('ai_coach_active_user', JSON.stringify(newUser));
-    state.currentUser = newUser;
-    updateAuthUI(newUser);
-
-    showAuthSuccess(`Account created successfully! Welcome, ${name}.`);
-    setTimeout(() => { closeAuthModal(); }, 1200);
-
-  } else {
-    if (!email) return showAuthError("Please enter your email address.");
-    if (!password) return showAuthError("Please enter your password.");
-
-    const users = JSON.parse(localStorage.getItem('ai_coach_demo_users') || '[]');
-    let user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-
-    if (!user && (email.toLowerCase() === 'demo@example.com' || email.toLowerCase() === 'admin@example.com') && password === 'password123') {
-      user = { name: 'Demo Candidate', email: 'demo@example.com', role: 'Software Engineer' };
-    }
-
-    if (user) {
-      localStorage.setItem('ai_coach_active_user', JSON.stringify(user));
-      state.currentUser = user;
-      updateAuthUI(user);
-      showAuthSuccess(`Login successful! Welcome back, ${user.name}.`);
-      setTimeout(() => { closeAuthModal(); }, 1000);
-    } else {
-      showAuthError("Invalid email or password.");
-    }
+    showAuthSuccess(isSignupMode ? `Account created! Welcome, ${data.user.name}.` : `Login successful! Welcome back, ${data.user.name}.`);
+    setTimeout(() => { closeAuthModal(); }, 1000);
+  } catch (err) {
+    showAuthError('Can\u2019t reach the server. Check your connection and try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = idleLabel; }
   }
 }
 
 function logoutUser() {
   localStorage.removeItem('ai_coach_active_user');
+  localStorage.removeItem('ai_coach_token');
+  state.authToken = null;
   state.currentUser = { name: 'Fresher Candidate', role: 'Software Engineer' };
   updateAuthUI(null);
 }
@@ -1707,3 +1740,160 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+
+
+// ---------------- UX POLISH: toasts, password meter, mic waveform ----------------
+function showToast(msg, type = 'info', ms = 3500) {
+  const host = document.getElementById('toastHost');
+  if (!host) return;
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  host.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, ms);
+}
+
+(function initPasswordMeter() {
+  const pw = document.getElementById('authPassword');
+  const meter = document.getElementById('pwMeter');
+  if (!pw || !meter) return;
+  const fill = document.getElementById('pwFill');
+  const label = document.getElementById('pwLabel');
+  pw.addEventListener('input', () => {
+    const v = pw.value;
+    const registering = document.getElementById('groupConfirmPassword')?.style.display !== 'none';
+    meter.style.display = registering && v ? 'flex' : 'none';
+    let s = 0;
+    if (v.length >= 8) s++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+    if (/\d/.test(v)) s++;
+    if (/[^A-Za-z0-9]/.test(v) || v.length >= 14) s++;
+    const L = [['Too weak', '#f87171'], ['Weak', '#fb923c'], ['Okay', '#fbbf24'], ['Good', '#a3e635'], ['Strong', '#4ade80']][s];
+    fill.style.width = `${(s / 4) * 100}%`;
+    fill.style.background = L[1];
+    label.textContent = L[0];
+    label.style.color = L[1];
+  });
+})();
+
+// Live mic level bars, driven by an AnalyserNode on the mic stream
+function startMicWave(stream) {
+  const cv = document.getElementById('micWave');
+  if (!cv || !window.AudioContext) return null;
+  const ac = new AudioContext();
+  const an = ac.createAnalyser();
+  an.fftSize = 64;
+  ac.createMediaStreamSource(stream).connect(an);
+  const data = new Uint8Array(an.frequencyBinCount);
+  const ctx = cv.getContext('2d');
+  let raf;
+  const draw = () => {
+    raf = requestAnimationFrame(draw);
+    an.getByteFrequencyData(data);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const bars = 16, w = cv.width / bars;
+    for (let i = 0; i < bars; i++) {
+      const h = Math.max(2, (data[i] / 255) * cv.height);
+      ctx.fillStyle = '#7dd3fc';
+      ctx.fillRect(i * w + 1, (cv.height - h) / 2, w - 3, h);
+    }
+  };
+  draw();
+  return () => { cancelAnimationFrame(raf); ac.close(); ctx.clearRect(0, 0, cv.width, cv.height); };
+}
+
+
+// Count-up reveal for report numbers (keeps each element's own prefix/suffix, e.g. "85 / 100", "92%")
+function animateReportNumbers(overall) {
+  const ids = ['reportScoreOverall', 'reportPostureScore', 'reportPostureStability', 'reportEyeContact',
+    'reportGestureControl', 'reportFacialEngage', 'reportWpmText', 'reportFillersText',
+    'reportFluencyScore', 'reportGrammarScore'];
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dur = 1100, t0 = performance.now();
+  const items = ids.map((id) => {
+    const el = document.getElementById(id);
+    const m = el && el.textContent.match(/-?\d+(\.\d+)?/);
+    return m ? { el, target: parseFloat(m[0]), text: el.textContent, raw: m[0] } : null;
+  }).filter(Boolean);
+  const bar = document.getElementById('reportScoreBar');
+  if (bar) { bar.style.width = '0'; requestAnimationFrame(() => { bar.style.width = `${Math.max(0, Math.min(100, overall))}%`; }); }
+  if (reduce) return;
+  const tick = (now) => {
+    const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    items.forEach((it) => {
+      const v = Number.isInteger(it.target) ? Math.round(it.target * e) : (it.target * e).toFixed(1);
+      it.el.textContent = it.text.replace(it.raw, v);
+    });
+    if (p < 1) requestAnimationFrame(tick);
+    else items.forEach((it) => { it.el.textContent = it.text; });
+  };
+  requestAnimationFrame(tick);
+}
+
+
+// Keep page content clear of the fixed header, whatever height it wraps to on small screens
+(function trackHeaderHeight() {
+  const hdr = document.querySelector('.app-header');
+  if (!hdr) return;
+  const set = () => document.documentElement.style.setProperty('--header-h', hdr.offsetHeight + 'px');
+  set();
+  window.addEventListener('resize', set);
+  if (window.ResizeObserver) new ResizeObserver(set).observe(hdr);
+})();
+
+
+// ---------------- Auth form: inline per-field validation ----------------
+(function initAuthValidation() {
+  const $ = (id) => document.getElementById(id);
+  const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const rules = {
+    authName: (v) => (isSignupMode && !v.trim() ? 'Please enter your name.' : ''),
+    authEmail: (v) => (!v.trim() ? 'Please enter your email address.' : !emailOk(v.trim()) ? 'That email address doesn\u2019t look right.' : ''),
+    authPassword: (v) => (!v ? 'Please enter your password.' : isSignupMode && v.length < 6 ? 'Use at least 6 characters.' : ''),
+    authConfirmPassword: (v) => (isSignupMode && v !== ($('authPassword')?.value || '') ? 'Passwords don\u2019t match yet.' : ''),
+  };
+  function check(id, show = true) {
+    const el = $(id), out = $('err-' + id);
+    if (!el || !rules[id]) return true;
+    const msg = rules[id](el.value);
+    if (show) {
+      el.classList.toggle('invalid', !!msg);
+      el.classList.toggle('valid', !msg && !!el.value);
+      el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      if (out) out.textContent = msg;
+    }
+    return !msg;
+  }
+  Object.keys(rules).forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener('blur', () => check(id));
+    el.addEventListener('input', () => { if (el.classList.contains('invalid')) check(id); });
+  });
+  $('authPassword')?.addEventListener('input', () => { if ($('authConfirmPassword')?.value) check('authConfirmPassword'); });
+
+  // show/hide password
+  $('pwToggle')?.addEventListener('click', () => {
+    const p = $('authPassword'), showing = p.type === 'text';
+    p.type = showing ? 'password' : 'text';
+    $('pwToggle').textContent = showing ? 'Show' : 'Hide';
+    $('pwToggle').setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  });
+
+  // Gate submit: validate every visible field, focus the first bad one
+  const original = window.handleAuthSubmit;
+  window.handleAuthSubmit = function () {
+    const ids = ['authName', 'authEmail', 'authPassword', 'authConfirmPassword'].filter((id) => $(id)?.offsetParent !== null);
+    const bad = ids.filter((id) => !check(id));
+    if (bad.length) { $(bad[0]).focus(); return; }
+    return original.apply(this, arguments);
+  };
+  // clear stale field errors when switching Login/Register
+  const origMode = window.setAuthMode;
+  window.setAuthMode = function () {
+    ['authName', 'authEmail', 'authPassword', 'authConfirmPassword'].forEach((id) => {
+      $(id)?.classList.remove('invalid', 'valid'); const o = $('err-' + id); if (o) o.textContent = '';
+    });
+    return origMode.apply(this, arguments);
+  };
+})();

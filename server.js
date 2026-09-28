@@ -1,20 +1,34 @@
+require("dotenv").config();
 const express = require("express");
+const http = require("http");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { WebSocketServer } = require("ws");
+const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(__dirname));
 
-const JWT_SECRET = "ai_communication_coach_secret_key_2026";
+// Required env vars — see .env.example. Server refuses to start without them
+// so a hardcoded secret can never accidentally ship again.
+["JWT_SECRET", "MONGODB_URI", "DEEPGRAM_API_KEY"].forEach((key) => {
+  if (!process.env[key]) {
+    console.error(`❌ Missing required environment variable: ${key}. See .env.example.`);
+    process.exit(1);
+  }
+});
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
 
 // ---------------- 1. MONGODB CONNECTION WITH FALLBACK ----------------
 let isMongoConnected = false;
 
-mongoose.connect("mongodb+srv://BethaSailu:Shaiksabiya%408@ai-body-language-coach.77snppj.mongodb.net/ai_body_language")
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     isMongoConnected = true;
     console.log("✅ MongoDB Atlas connected successfully");
@@ -92,9 +106,16 @@ const authMiddleware = (req, res, next) => {
 // ---------------- 3. AUTHENTICATION ENDPOINTS ----------------
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email: rawEmail, password, role } = req.body;
+    const email = typeof rawEmail === "string" ? rawEmail.trim() : rawEmail;
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Name, email, and password are required." });
+    }
+    if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+    if (typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long." });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -128,8 +149,9 @@ app.post("/api/auth/signup", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
+    const { email: rawEmail, password } = req.body;
+    const email = typeof rawEmail === "string" ? rawEmail.trim() : rawEmail;
+    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: "Email and password are required." });
     }
 
@@ -449,9 +471,81 @@ app.get("/users", async (req, res) => {
   res.json(memoryStore.users);
 });
 
+// ---------------- 7. LIVE SPEECH TRANSCRIPTION RELAY (Deepgram) ----------------
+// Browser mic audio -> this WebSocket -> Deepgram streaming ASR -> transcript back to browser.
+// Keeps the Deepgram API key server-side only; the client never sees it.
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on("connection", (clientSocket) => {
+  console.log("🎙️  Client connected to /ws/speech");
+  let dgReady = false;
+  let queuedChunks = [];
+
+  // NOTE: no `encoding`/`sample_rate` here on purpose. The browser sends
+  // WebM-container audio (audio/webm;codecs=opus) via MediaRecorder, not
+  // headerless raw Opus frames. Deepgram auto-detects the container format
+  // as long as encoding/sample_rate are left unset — setting them (as an
+  // earlier version of this file did) tells Deepgram to expect raw Opus,
+  // which silently fails to decode WebM chunks.
+  const dgSocket = deepgram.listen.live({
+    model: "nova-3",
+    language: "en-US",
+    smart_format: true,
+    interim_results: true,
+    endpointing: 300,
+    filler_words: true,
+  });
+
+  dgSocket.on(LiveTranscriptionEvents.Open, () => {
+    console.log("✅ Deepgram connection open");
+    dgReady = true;
+    queuedChunks.forEach((chunk) => dgSocket.send(chunk));
+    queuedChunks = [];
+  });
+
+  dgSocket.on(LiveTranscriptionEvents.Transcript, (data) => {
+    if (clientSocket.readyState === clientSocket.OPEN) {
+      clientSocket.send(JSON.stringify({ type: "transcript", data }));
+    }
+  });
+
+  dgSocket.on(LiveTranscriptionEvents.Error, (err) => {
+    console.error("❌ Deepgram error:", err);
+    if (clientSocket.readyState === clientSocket.OPEN) {
+      clientSocket.send(JSON.stringify({ type: "error", message: "Speech engine error." }));
+    }
+  });
+
+  dgSocket.on(LiveTranscriptionEvents.Close, (evt) => {
+    console.log("🔌 Deepgram connection closed", evt && evt.code, evt && evt.reason);
+  });
+
+  clientSocket.on("message", (audioChunk) => {
+    if (dgReady) {
+      try { dgSocket.send(audioChunk); } catch (e) { console.error("Failed forwarding audio chunk:", e.message); }
+    } else {
+      queuedChunks.push(audioChunk); // buffer until Deepgram connection is open
+    }
+  });
+
+  clientSocket.on("close", () => {
+    console.log("🎙️  Client disconnected from /ws/speech");
+    try { dgSocket.finish(); } catch (e) {}
+  });
+});
+
 // Start Server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Full-Stack AI Communication Coach Server running on port ${PORT}`));
+const server = http.createServer(app);
+
+server.on("upgrade", (req, socket, head) => {
+  if (req.url === "/ws/speech") {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws));
+  } else {
+    socket.destroy();
+  }
+});
+
+server.listen(PORT, () => console.log(`🚀 Full-Stack AI Communication Coach Server running on port ${PORT}`));
 
 module.exports = app;
-
